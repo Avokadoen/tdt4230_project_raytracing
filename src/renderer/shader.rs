@@ -1,10 +1,10 @@
 
 // Used for shaders
-use std::ffi::{CStr};
+use std::ffi::CStr;
 
-// TODO: we should probably move shader and program into separate files/modules
+use crate::resources::Resources;
 
-
+// TODO: Shader error type
 use gl::types::{
     GLuint,
     GLenum,
@@ -21,6 +21,26 @@ pub struct Shader {
 impl Shader {
     pub fn id(&self) -> GLuint {
         self.id
+    }
+
+    pub fn from_resources(resources: &Resources, name: &str) -> Result<Shader, String> {
+        const POSSIBLE_EXT: [(&str, gl::types::GLenum); 3] = [
+            (".vert", gl::VERTEX_SHADER),
+            (".frag", gl::FRAGMENT_SHADER),
+            (".comp", gl::COMPUTE_SHADER)
+        ];
+
+        let shader_kind = POSSIBLE_EXT.iter()
+            .find(|&&(file_extension, _)| {
+                name.ends_with(file_extension)
+            })
+            .map(|&(_, kind)| kind)
+            .ok_or_else(|| format!("Can not determine shader type for resource {}", name))?;
+
+        let source = resources.load_cstring(name)
+            .map_err(|e| format!("Error loading resource {}: {:?}", name, e))?;
+
+        Shader::from_source(&source, shader_kind)
     }
 
     pub fn from_source(
@@ -62,14 +82,6 @@ impl Shader {
             id
         };
         Ok(Shader { id })
-    }
-
-    pub fn from_vert_source(source: &CStr) -> Result<Shader, String> {
-        Shader::from_source(source, gl::VERTEX_SHADER)
-    }
-
-    pub fn from_frag_source(source: &CStr) -> Result<Shader, String> {
-        Shader::from_source(source, gl::FRAGMENT_SHADER)
     }
 }
 

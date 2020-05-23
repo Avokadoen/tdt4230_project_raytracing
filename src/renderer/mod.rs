@@ -1,7 +1,10 @@
 // TODO: Document functions and structs with /// https://doc.rust-lang.org/rustdoc/how-to-write-documentation.html
-// TODO: importing is very strange atm i.e shader::Shader ... 
-
+// TODO: most of these modules are very much raw opengl, I should create a interface that is more trivial to be 
+//       duplicated by other api's
 pub mod shader;
 pub mod program;
+pub mod texture;
+pub mod vao;
+pub mod vbo;
 
 mod utils;
