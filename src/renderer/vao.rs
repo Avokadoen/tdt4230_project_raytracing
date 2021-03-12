@@ -3,34 +3,28 @@ use gl::types::{
     GLint,
 };
 
-#[allow(dead_code)]
 pub struct VertexAttributePointer {
     pub location: GLuint,
     pub size: GLint,
     pub offset: usize
 }
 
-#[allow(dead_code)]
 pub struct VertexArrayObject {
     id: u32,
 }
 
 impl VertexArrayObject {
-    #[allow(dead_code)]
     pub fn id(&self) -> u32 {
         self.id
     }
 
-    #[allow(dead_code)]
     pub fn bind(&self) {
         unsafe {
             gl::BindVertexArray(self.id);
         }
     }
 
-    // TODO: should this be part of impl?
-    #[allow(dead_code)]
-    pub fn unbind(&self) {
+    pub fn unbind() {
         unsafe {
             gl::BindVertexArray(0);
         }

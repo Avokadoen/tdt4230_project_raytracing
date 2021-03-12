@@ -15,10 +15,15 @@ pub struct Program {
 }
 
 impl Program {
-    // TODO: rename?
-    pub fn set_used(&self) {
+    pub fn bind(&self) {
         unsafe {
             gl::UseProgram(self.id);
+        }
+    }
+
+    pub fn unbind() {
+        unsafe {
+            gl::UseProgram(0);
         }
     }
 

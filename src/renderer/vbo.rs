@@ -8,24 +8,20 @@ pub struct VertexBufferObject {
 
 impl VertexBufferObject {
 
-    #[allow(dead_code)]
     pub fn id(&self) -> u32 {
         self.id
     }
 
-    #[allow(dead_code)]
     pub fn length(&self) -> i32 {
         self.length
     }
 
-    #[allow(dead_code)]
     pub fn bind(&self) {
         unsafe {
             gl::BindBuffer(self.binding, self.id);
         }
     }
     
-    #[allow(dead_code)]
     pub fn unbind(&self) {
         unsafe {
             gl::BindBuffer(self.binding, 0);
@@ -33,7 +29,6 @@ impl VertexBufferObject {
     }
 
     // https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/glBindBuffer.xhtml
-    #[allow(dead_code)]
     pub fn new<T>(vertex_buffer: Vec<T>, binding: GLenum) -> Self{
         let mut id: gl::types::GLuint = 0;
         let length = vertex_buffer.len() as i32;
