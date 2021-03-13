@@ -15,6 +15,7 @@ fn main() {
         .expect("failed to find target dir")
         .join(env::var("PROFILE").unwrap());
 
+    // TODO: delete old target assets folder?
     copy(
         &manifest_dir.join("assets"),
         &executable_path.join("assets"),

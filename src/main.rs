@@ -48,7 +48,7 @@ fn main() {
     let window = video_subsystem
         .window("GPUPE prototype", window_x, window_y)
         .opengl()
-        .resizable()
+        // .resizable()
         .build()
         .unwrap();
 
