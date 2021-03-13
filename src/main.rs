@@ -58,27 +58,15 @@ fn main() {
 
     // create quad data
     let quad_program = Program::from_resources(&res, "shaders/quad").unwrap();
-
-    let vertices = VertexBufferObject::new::<f32>(
-        vec![
-        //   x,    y    z,   u,   v   
-            -1.0, -1.0, 0.0, 0.0, 0.0, // bottom left
-             1.0,  1.0, 0.0, 1.0, 1.0, // top right
-            -1.0,  1.0, 0.0, 0.0, 1.0, // top left
-             1.0, -1.0, 0.0, 1.0, 0.0  // bottom right
-        ],
-        gl::ARRAY_BUFFER
-    );
-
-    let indices = VertexBufferObject::new::<u32>(
+    let quad_indices = VertexBufferObject::new::<u32>(
         vec![
             0, 1, 2,
             0, 1, 3
         ],
-        gl::ELEMENT_ARRAY_BUFFER
+        gl::ELEMENT_ARRAY_BUFFER,
+        gl::STATIC_DRAW
     );
-
-    let vao = { 
+    let quad_vao = { 
         let pos = VertexAttributePointer {
             location: 0,
             size: 3,
@@ -90,6 +78,18 @@ fn main() {
             size: 2,
             offset: 3
         };
+
+        let vertices = VertexBufferObject::new::<f32>(
+            vec![
+            //   x,    y,   z,   u,   v   
+                -1.0, -1.0, 0.0, 0.0, 0.0, // bottom left
+                 1.0,  1.0, 0.0, 1.0, 1.0, // top right
+                -1.0,  1.0, 0.0, 0.0, 1.0, // top left
+                 1.0, -1.0, 0.0, 1.0, 0.0  // bottom right
+            ],
+            gl::ARRAY_BUFFER,
+            gl::STATIC_DRAW
+        );
 
         VertexArrayObject::new(vec![pos, uv], 5, vertices.id())
     };
@@ -145,6 +145,28 @@ fn main() {
     // This is somewhat bad practice, but in our case, the consequenses are non existent
     camera.render_texture.bind();
 
+    // TODO: vao might not be needed for shader storage buffer? read spec 
+    //       and update code accordingly
+    let hittable_vao = { 
+        let attrib = VertexAttributePointer {
+            location: 0,
+            size: 4,
+            offset: 0
+        };
+
+        let sphere_vbo = VertexBufferObject::new::<f32>(
+            vec![
+            //  x,   y,    z,   radius
+                0.0, 0.0, -1.0, 1.0
+            ],
+            gl::ARRAY_BUFFER,
+            gl::DYNAMIC_DRAW
+        );
+        unsafe { gl::BindBufferBase(gl::SHADER_STORAGE_BUFFER, 1, sphere_vbo.id()); } 
+
+        VertexArrayObject::new(vec![attrib], 4, sphere_vbo.id())
+    };
+
     let mut chronos: Chronos = Default::default();
     let mut input_handler: InputHandler = Default::default();
 
@@ -176,24 +198,25 @@ fn main() {
                 _ => ()
             }
         }
-
+        hittable_vao.bind();
         dispatch_compute(&mut rayrace_program, window_x, window_y);
-        
+        VertexArrayObject::unbind();
+
         quad_program.bind();
-        vao.bind();
-        indices.bind();
+        quad_vao.bind();
+        quad_indices.bind();
 
         unsafe {
             gl::Clear(gl::COLOR_BUFFER_BIT);
             gl::DrawElements(
                 gl::TRIANGLES, 
-                indices.length(), 
+                quad_indices.length(), 
                 gl::UNSIGNED_INT,
                 std::ptr::null()
             );
         }
 
-        indices.unbind();
+        quad_indices.unbind();
         VertexArrayObject::unbind();
         Program::unbind();
 

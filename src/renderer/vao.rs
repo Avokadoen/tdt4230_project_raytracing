@@ -14,6 +14,7 @@ pub struct VertexArrayObject {
 }
 
 impl VertexArrayObject {
+    #[allow(dead_code)]
     pub fn id(&self) -> u32 {
         self.id
     }
@@ -30,8 +31,7 @@ impl VertexArrayObject {
         }
     }
 
-    // TODO: VBO type
-    #[allow(dead_code)]
+    // TODO: components can be retrieved from attributes
     pub fn new(attributes: Vec<VertexAttributePointer>, components: usize, vbo: u32) -> Self {
         let mut id: GLuint = 0;
 

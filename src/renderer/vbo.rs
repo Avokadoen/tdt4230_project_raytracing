@@ -29,7 +29,7 @@ impl VertexBufferObject {
     }
 
     // https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/glBindBuffer.xhtml
-    pub fn new<T>(vertex_buffer: Vec<T>, binding: GLenum) -> Self{
+    pub fn new<T>(vertex_buffer: Vec<T>, binding: GLenum, usage: GLenum) -> Self{
         let mut id: gl::types::GLuint = 0;
         let length = vertex_buffer.len() as i32;
         let binding = binding;
@@ -41,7 +41,7 @@ impl VertexBufferObject {
                 binding, // target
                 (vertex_buffer.len() * std::mem::size_of::<T>()) as gl::types::GLsizeiptr, // size of data in bytes
                 vertex_buffer.as_ptr() as *const gl::types::GLvoid, // pointer to data
-                gl::STATIC_DRAW, // usage
+                usage, 
             );
 
             gl::BindBuffer(binding, 0);

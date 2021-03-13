@@ -14,3 +14,7 @@ Opengl textures: https://learnopengl.com/Getting-started/Textures
 Using opengl compute shaders: https://antongerdelan.net/opengl/compute.html
 
 Raytracing concepts: https://raytracing.github.io/books/RayTracingInOneWeekend.html
+
+Reading vbo in compute shader: https://stackoverflow.com/a/21344861/11768869
+
+blue noise texure: http://momentsingraphics.de/BlueNoise.html
