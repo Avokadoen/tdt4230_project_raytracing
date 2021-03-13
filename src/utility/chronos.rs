@@ -24,6 +24,7 @@ impl Default for Chronos {
 }
 
 impl Chronos {
+    #[allow(dead_code)]
     pub fn delta_time(&self) -> f64 {
         self.delta_time
     }

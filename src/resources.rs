@@ -58,6 +58,7 @@ impl Resources {
         Ok(unsafe { ffi::CString::from_vec_unchecked(buffer) })
     }
 
+    #[allow(dead_code)]
     pub fn load_image(&self, resource_name: &str) -> ImageResult<DynamicImage> {
         // TODO: validate extension name to be supported format
 

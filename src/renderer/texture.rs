@@ -1,6 +1,5 @@
-use gl::types::{GLuint, GLenum};
+use gl::types::{GLenum, GLsizei, GLuint};
 
-#[allow(dead_code)]
 pub struct Texture {
     id: u32,
     active: GLenum,
@@ -14,7 +13,6 @@ impl Texture {
         self.id
     }
 
-    #[allow(dead_code)]
     pub fn bind(&self) {
         unsafe {
             gl::ActiveTexture(self.active);
@@ -30,17 +28,15 @@ impl Texture {
         }
     }
 
-    // TODO: program should have configureable texture size
-    #[allow(dead_code)]
-    pub fn new(active: GLenum, bind_slot: GLuint, internal_format: GLenum, gltype: GLenum) -> Self {
+    pub fn new(active: GLenum, bind_slot: GLuint, internal_format: GLenum, gltype: GLenum, width: GLsizei, heigth: GLsizei) -> Self {
         let id = prep_texture(active);
         unsafe { 
             gl::TexImage2D(
                 gl::TEXTURE_2D, 
                 0, 
                 internal_format as i32, 
-                512,
-                512,
+                width,
+                heigth,
                 0, 
                 gltype, 
                 gl::UNSIGNED_BYTE, 

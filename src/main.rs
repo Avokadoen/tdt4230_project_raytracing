@@ -1,3 +1,4 @@
+use cgmath::Vector3;
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 
@@ -8,16 +9,10 @@ mod utility;
 mod resources;
 
 use resources::Resources;
-use renderer::{
-    program::Program, 
-    shader::Shader, 
-    texture::Texture, 
-    vao::{
+use renderer::{camera::CameraBuilder, program::Program, shader::Shader, vao::{
         VertexArrayObject,
         VertexAttributePointer
-    }, 
-    vbo::VertexBufferObject
-};
+    }, vbo::VertexBufferObject};
 
 use utility::{
     input_handler::InputHandler,
@@ -41,8 +36,7 @@ fn main() {
         gl_attr.set_context_version(4, 5);
     }
 
-    // NOTE: CHUNK SIZE
-    let window_x: u32 = 512;
+    let window_x: u32 = 910;
     let window_y: u32 = 512;
 
     let window = video_subsystem
@@ -141,10 +135,15 @@ fn main() {
         Program::unbind();
     }
 
-    let render_texture = Texture::new( gl::TEXTURE0, 0, gl::RGBA32F, gl::RGBA);
+    let camera = CameraBuilder::new(window_x as i32)
+        .with_aspect_ratio(window_x as f32 / window_y as f32 )
+        .with_origin(Vector3::<f32>::new(0.0, 0.0, 0.0))
+        .with_viewport_height(2.0)
+        .build(&mut rayrace_program);
+
     // We only use this texture, so we bind it before render loop and forget about it.
     // This is somewhat bad practice, but in our case, the consequenses are non existent
-    render_texture.bind();
+    camera.render_texture.bind();
 
     let mut chronos: Chronos = Default::default();
     let mut input_handler: InputHandler = Default::default();
