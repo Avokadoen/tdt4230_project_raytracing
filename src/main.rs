@@ -40,7 +40,7 @@ fn main() {
     let window_y: u32 = 512;
 
     let window = video_subsystem
-        .window("GPUPE prototype", window_x, window_y)
+        .window("TDT4230 Raytracer", window_x, window_y)
         .opengl()
         // .resizable()
         .build()
@@ -156,9 +156,8 @@ fn main() {
 
         let sphere_vbo = VertexBufferObject::new::<f32>(
             vec![
-            //  x,   y,    z,   radius
+            // |x   |y   |z    |radius|
                 0.0, 0.0, -1.0, 0.5,
-                0.6, 0.0, -1.0, 0.3,
             ],
             gl::ARRAY_BUFFER,
             gl::DYNAMIC_DRAW
