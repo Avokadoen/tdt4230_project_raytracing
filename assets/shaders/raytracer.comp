@@ -25,7 +25,9 @@ struct HitRecord {
     vec3 point;
     vec3 normal;
     float t;
+    bool front_face;
 };
+void HitRecordFaceNormal(out HitRecord rec, Ray r, vec3 out_normal);
 
 // TODO: 6.13. An Abstraction for Hittable Objects
 //       abstraction for hittable on GPU can use 
@@ -43,7 +45,7 @@ struct Sphere {
 layout (std430, binding = 1) buffer SphereBuffer {
     Sphere spheres[];
 };
-bool HitSphere(Sphere sphere, Ray r, float t_min, float t_max, out HitRecord rec); 
+bool SphereHit(Sphere sphere, Ray r, float t_min, float t_max, out HitRecord rec); 
 
 void main() {
     ivec2 pixel_coord = ivec2(gl_GlobalInvocationID.x, gl_GlobalInvocationID.y);
@@ -63,7 +65,7 @@ vec3 RayAt(Ray r, float t) {
 
 vec3 RayColor(Ray r) {
     HitRecord hit;
-    bool did_hit = HitSphere(spheres[0], r, 0.0, 20.0, hit);
+    bool did_hit = SphereHit(spheres[0], r, 0.0, 20.0, hit);
     if (did_hit) {
         return 0.5 * vec3(hit.normal.x + 1, hit.normal.y + 1, hit.normal.z + 1);
     }
@@ -72,7 +74,16 @@ vec3 RayColor(Ray r) {
     return (1.0 - t) * vec3(1.0, 1.0, 1.0) + t * vec3(0.5, 0.7, 1.0);
 }
 
-bool HitSphere(Sphere sphere, Ray r, float t_min, float t_max, out HitRecord rec) {
+void HitRecordFaceNormal(out HitRecord rec, Ray r, vec3 out_normal) {
+    rec.front_face = dot(r.direction, out_normal) < 0; 
+    if (rec.front_face) {
+        rec.normal = out_normal;
+    } else {
+        rec.normal = -out_normal;
+    }
+}
+
+bool SphereHit(Sphere sphere, Ray r, float t_min, float t_max, out HitRecord rec) {
     // calculate vector from sphere to ray origin
     vec3 oc = r.origin - sphere.center; 
     float a = dot(r.direction, r.direction);
@@ -97,7 +108,8 @@ bool HitSphere(Sphere sphere, Ray r, float t_min, float t_max, out HitRecord rec
 
     rec.t = root;
     rec.point = RayAt(r, rec.t);
-    rec.normal = (rec.point - sphere.center) / sphere.radius;
+    vec3 out_normal = (rec.point - sphere.center) / sphere.radius;
+    HitRecordFaceNormal(rec, r, out_normal);
 
     return true;
 }
