@@ -38,7 +38,7 @@ void main() {
     float v = float(pixel_coord.y) / (camera.image_height-1);
 
     vec3 ray_dir = camera.lower_left_corner + u * camera.horizontal + v * camera.vertical - camera.origin;
-    Ray ray = Ray(camera.origin, normalize(ray_dir));
+    Ray ray = Ray(camera.origin, ray_dir);
     vec4 color = vec4(RayColor(ray), 1.0);
     imageStore(img_output, pixel_coord, color);
 }
@@ -54,23 +54,19 @@ vec3 RayColor(Ray r) {
         return 0.5 * vec3(normal.x + 1, normal.y + 1, normal.z + 1);
     }
     
-    t = 0.5 * (r.direction.y + 1.0);
+    t = 0.5 * (normalize(r.direction).y + 1.0);
     return (1.0 - t) * vec3(1.0, 1.0, 1.0) + t * vec3(0.5, 0.7, 1.0);
 }
 
 float HitSphere(Sphere sphere, Ray r) {
     // calculate vector from sphere to ray origin
     vec3 oc = r.origin - sphere.pos; 
-    // TODO: I have probably misinterpreted this 
-    // Source material specifies that a = dot(r.direction, r.direction)
-    // but direction is normalized, so this should always be 1. :/
-    float a = 1;
-    // angle between ray and vector between origin of ray and sphere 
-    float b = 2.0 * dot(oc, r.direction);
+    float a = dot(r.direction, r.direction);
+    float half_b = dot(oc, r.direction);
     // angle distance between ray and oc 
-    float c = dot(oc, oc) - pow(sphere.radius, 2);
+    float c = dot(oc, oc) - sphere.radius * sphere.radius;
     
-    float discriminant = b * b - 4.0 * a * c;
+    float discriminant = half_b * half_b - a * c;
     bool hit = discriminant >= 0;
-    return (-1.0 * float(!hit)) + (-b - sqrt(discriminant)) / (2.0 * a) * float(hit);
+    return (-1.0 * float(!hit)) + ((-half_b - sqrt(discriminant)) / a) * float(hit);
 }
