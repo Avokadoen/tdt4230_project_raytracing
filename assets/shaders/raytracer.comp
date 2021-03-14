@@ -2,15 +2,6 @@
 layout(local_size_x = 1, local_size_y = 1) in;
 layout(rgba32f, binding = 0) uniform image2D img_output;
 
-struct Sphere {
-    vec3 pos; 
-    float radius;
-};                     
-// Read about std here: https://www.khronos.org/opengl/wiki/Interface_Block_(GLSL)#Memory_layout
-layout (std430, binding = 1) buffer SphereBuffer {
-    Sphere spheres[];
-};
-
 struct Camera {
     int image_width;
     int image_height;
@@ -29,6 +20,23 @@ struct Ray {
 };
 vec3 RayAt(Ray r, float t);
 vec3 RayColor(Ray r);
+
+// TODO: 6.13. An Abstraction for Hittable Objects
+//       abstraction for hittable on GPU can use 
+//       "location aliasing" (https://www.khronos.org/opengl/wiki/Layout_Qualifier_(GLSL)#Interface_components)
+//       Pad all primitives with the same byte size and specify type using a
+//       enum (int). Using the enum we can find out which alias we are using and bring meaning to the struct 
+//       data and call the correct method. The negative here is the padding meaning we will waste bytes
+//       We can also just keep adding primitives which will bloat our code, but save bytes.  
+
+struct Sphere {
+    vec3 pos; 
+    float radius;
+};                     
+// Read about std here: https://www.khronos.org/opengl/wiki/Interface_Block_(GLSL)#Memory_layout
+layout (std430, binding = 1) buffer SphereBuffer {
+    Sphere spheres[];
+};
 float HitSphere(Sphere sphere, Ray r); 
 
 void main() {
@@ -68,5 +76,5 @@ float HitSphere(Sphere sphere, Ray r) {
     
     float discriminant = half_b * half_b - a * c;
     bool hit = discriminant >= 0;
-    return (-1.0 * float(!hit)) + ((-half_b - sqrt(discriminant)) / a) * float(hit);
+    return -1.0 * float(!hit) + ((-half_b - sqrt(discriminant)) / a) * float(hit);
 }
