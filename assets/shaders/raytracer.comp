@@ -2,6 +2,21 @@
 layout(local_size_x = 1, local_size_y = 1) in;
 layout(rgba32f, binding = 0) uniform image2D img_output;
 
+/*
+    This code is based on raytracing in one weekend (https://raytracing.github.io/books/RayTracingInOneWeekend.html)
+*/
+
+// Constants
+// See glsl 4.40 spec chapter 4.7.1 for info on infinity
+// https://www.khronos.org/registry/OpenGL/specs/gl/GLSLangSpec.4.40.pdf
+const float infinity = 0.001 / 0;
+const float pi = 3.14159265358; // 3.1415926535897932385
+
+float DegreesToRadians(float deg) {
+    return deg * pi / 180.0;
+}
+
+
 struct Camera {
     int image_width;
     int image_height;
@@ -45,7 +60,8 @@ struct Sphere {
 layout (std430, binding = 1) buffer SphereBuffer {
     Sphere spheres[];
 };
-bool SphereHit(Sphere sphere, Ray r, float t_min, float t_max, out HitRecord rec); 
+bool SpheresHit(Ray r, float t_min, float t_max, out HitRecord rec); 
+bool SphereHit(Sphere sphere, Ray r, float t_min, float t_max, out HitRecord rec);
 
 void main() {
     ivec2 pixel_coord = ivec2(gl_GlobalInvocationID.x, gl_GlobalInvocationID.y);
@@ -65,11 +81,10 @@ vec3 RayAt(Ray r, float t) {
 
 vec3 RayColor(Ray r) {
     HitRecord hit;
-    bool did_hit = SphereHit(spheres[0], r, 0.0, 20.0, hit);
-    if (did_hit) {
+    if (SpheresHit(r, 0.0, infinity, hit)) {
         return 0.5 * vec3(hit.normal.x + 1, hit.normal.y + 1, hit.normal.z + 1);
     }
-    
+
     float t = 0.5 * (normalize(r.direction).y + 1.0);
     return (1.0 - t) * vec3(1.0, 1.0, 1.0) + t * vec3(0.5, 0.7, 1.0);
 }
@@ -82,6 +97,22 @@ void HitRecordFaceNormal(out HitRecord rec, Ray r, vec3 out_normal) {
         rec.normal = -out_normal;
     }
 }
+
+bool SpheresHit(Ray r, float t_min, float t_max, out HitRecord rec) {
+    HitRecord temp_rec;
+    bool has_hit = false;
+    float closest = t_max;
+
+    for (int i = 0; i < spheres.length(); i++) {
+        if (SphereHit(spheres[i], r, t_min, closest, temp_rec)) {
+            has_hit = true;
+            rec = temp_rec;
+            closest = rec.t;
+        }
+    }
+
+    return has_hit;
+} 
 
 bool SphereHit(Sphere sphere, Ray r, float t_min, float t_max, out HitRecord rec) {
     // calculate vector from sphere to ray origin

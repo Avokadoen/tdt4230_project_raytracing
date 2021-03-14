@@ -156,8 +156,9 @@ fn main() {
 
         let sphere_vbo = VertexBufferObject::new::<f32>(
             vec![
-            // |x   |y   |z    |radius|
-                0.0, 0.0, -1.0, 0.5,
+            // |x      |y      |z      |radius|
+                0.0,    0.0,    -1.0,   0.5,
+                0.0,   -100.5,  -1.0,   100.0,
             ],
             gl::ARRAY_BUFFER,
             gl::DYNAMIC_DRAW
