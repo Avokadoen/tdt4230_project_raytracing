@@ -3,6 +3,10 @@
 This is a fork of [GPUPE](https://github.com/Avokadoen/GPUPE) with the aim of implementing raytracing on 
 opengl compute shaders using [Raytracing in one weekend](https://raytracing.github.io/books/RayTracingInOneWeekend.html).
 
+# Dependencies
+
+On windows you will need [mingw](http://mingw-w64.org/doku.php) to compile SDL2
+
 # Sources
 Thanks Nercury for a great blog about opengl in rust!
 http://nercury.github.io/rust/opengl/tutorial/2018/02/08/opengl-in-rust-from-scratch-00-setup.html
