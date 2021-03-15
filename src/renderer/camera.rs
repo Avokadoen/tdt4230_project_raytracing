@@ -13,6 +13,10 @@ pub struct Camera {
     pub lower_left_corner: Vector3::<f32>,
     pub origin: Vector3::<f32>,
     
+    // TODO: these are only i32 because it is easier to send to GPU
+    pub samples_per_pixel: i32,
+    pub max_bounce: i32,
+
     pub image_width: i32,
     pub image_height: i32,
     pub render_texture: Texture,
@@ -28,6 +32,8 @@ pub struct CameraBuilder {
     aspect_ratio: Option<f32>,
     viewport_height: Option<f32>,
     origin: Option<Vector3::<f32>>,
+    samples_per_pixel: Option<i32>,
+    max_bounce: Option<i32>,
 }
 
 impl CameraBuilder {
@@ -39,6 +45,8 @@ impl CameraBuilder {
             aspect_ratio: None,
             viewport_height: None,
             origin: None,
+            samples_per_pixel: None,
+            max_bounce: None,
         }
     }
 
@@ -55,6 +63,10 @@ impl CameraBuilder {
         let lower_left_corner = origin - horizontal/2.0 - vertical/2.0 - Vector3::<f32>::new(0.0, 0.0, focal_length);
 
         let image_height = (self.image_width as f32 / aspect_ratio) as i32;
+
+        let sample_per_pixel = self.samples_per_pixel.unwrap_or(10);
+        let max_bounce = self.max_bounce.unwrap_or(3);
+
         let camera = Camera {
             horizontal,
             vertical,
@@ -70,6 +82,8 @@ impl CameraBuilder {
                 self.image_width, 
                 image_height
             ),
+            samples_per_pixel: sample_per_pixel,
+            max_bounce
         };
 
         initial_uniforms(&camera, program);
@@ -91,6 +105,16 @@ impl CameraBuilder {
         self.origin = Some(origin);
         return self;
     }
+
+    pub fn with_sample_per_pixel(&mut self, sample_per_pixel: i32) -> &mut CameraBuilder {
+        self.samples_per_pixel = Some(sample_per_pixel);
+        return self;
+    }
+
+    pub fn with_max_bounce(&mut self, max_bounce: i32) -> &mut CameraBuilder {
+        self.max_bounce = Some(max_bounce);
+        return self;
+    }
 }
 
 
@@ -105,4 +129,7 @@ fn initial_uniforms(camera: &Camera, program: &mut Program) {
 
     program.set_vector3_f32("camera.lower_left_corner", camera.lower_left_corner).unwrap();
     program.set_vector3_f32("camera.origin", camera.origin).unwrap();
+    
+    program.set_i32("camera.samples_per_pixel", camera.samples_per_pixel).unwrap();
+    program.set_i32("camera.max_bounce", camera.max_bounce).unwrap();
 }

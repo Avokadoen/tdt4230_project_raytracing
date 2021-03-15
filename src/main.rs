@@ -2,7 +2,7 @@ use cgmath::Vector3;
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 
-use std::path::Path;
+use std::{borrow::BorrowMut, path::Path};
 
 mod renderer;
 mod utility;
@@ -119,7 +119,7 @@ fn main() {
     }
     let _work_group_invocation_limit = work_group_invocation_limit;
 
-    let mut rayrace_program = {
+    let mut raytrace_program = {
         let shader = Shader::from_resources(&res, "shaders/raytracer.comp").unwrap();
         Program::from_shaders(&[shader]).unwrap()
     }; 
@@ -139,7 +139,9 @@ fn main() {
         .with_aspect_ratio(window_x as f32 / window_y as f32 )
         .with_origin(Vector3::<f32>::new(0.0, 0.0, 0.0))
         .with_viewport_height(2.0)
-        .build(&mut rayrace_program);
+        .with_sample_per_pixel(50) // the bigger resolution, the less we need of this
+        .with_max_bounce(100)
+        .build(&mut raytrace_program);
 
     // We only use this texture, so we bind it before render loop and forget about it.
     // This is somewhat bad practice, but in our case, the consequenses are non existent
@@ -157,7 +159,9 @@ fn main() {
         let sphere_vbo = VertexBufferObject::new::<f32>(
             vec![
             // |x      |y      |z      |radius|
+            //    -1.0,    0.0,    -1.1,   0.5,
                 0.0,    0.0,    -1.0,   0.5,
+                // 1.0,    0.0,    -1.1,   0.5,
                 0.0,   -100.5,  -1.0,   100.0,
             ],
             gl::ARRAY_BUFFER,
@@ -167,6 +171,14 @@ fn main() {
 
         VertexArrayObject::new(vec![attrib], 4, sphere_vbo.id())
     };
+
+    {
+        // TODO: n^3-tree for voxel data: 
+        //       https://developer.nvidia.com/gpugems/gpugems2/part-v-image-oriented-computing/chapter-37-octree-textures-gpu?fbclid=IwAR057O64JgQK8kvI9Wil4NCnGWBG1ueNIoboYATwHhocpxzNIAKnBQBdkNE
+        let mut max_3d_size: i32 = 0;  
+        unsafe { gl::GetIntegerv(gl::MAX_3D_TEXTURE_SIZE, max_3d_size.borrow_mut() as *mut i32); }
+    }
+
 
     let mut chronos: Chronos = Default::default();
     let mut input_handler: InputHandler = Default::default();
@@ -200,7 +212,7 @@ fn main() {
             }
         }
         hittable_vao.bind();
-        dispatch_compute(&mut rayrace_program, window_x, window_y);
+        dispatch_compute(&mut raytrace_program, window_x, window_y);
         VertexArrayObject::unbind();
 
         quad_program.bind();

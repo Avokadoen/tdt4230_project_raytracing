@@ -17,4 +17,6 @@ Raytracing concepts: https://raytracing.github.io/books/RayTracingInOneWeekend.h
 
 Reading vbo in compute shader: https://stackoverflow.com/a/21344861/11768869
 
-blue noise texure: http://momentsingraphics.de/BlueNoise.html
+Blue noise texure: http://momentsingraphics.de/BlueNoise.html
+
+Storing a octree in a texture: https://developer.nvidia.com/gpugems/gpugems2/part-v-image-oriented-computing/chapter-37-octree-textures-gpu?fbclid=IwAR1iQ3i-t28gnm_XwP-MViIY11C4V9jjKniQonVQAbXym3BXcZ2muIofjWQ 
