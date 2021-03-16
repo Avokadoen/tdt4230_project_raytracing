@@ -1,5 +1,5 @@
 [package]
-name = "gl_gpupe"
+name = "tdt4230_raytracer"
 version = "0.1.0"
 authors = ["avokadoen <akselhallajs@gmail.com>"]
 edition = "2018"

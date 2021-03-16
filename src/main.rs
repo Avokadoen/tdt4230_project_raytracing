@@ -139,8 +139,8 @@ fn main() {
         .with_aspect_ratio(window_x as f32 / window_y as f32 )
         .with_origin(Vector3::<f32>::new(0.0, 0.0, 0.0))
         .with_viewport_height(2.0)
-        .with_sample_per_pixel(50) // the bigger resolution, the less we need of this
-        .with_max_bounce(100)
+        .with_sample_per_pixel(4) // the bigger resolution, the less we need of this
+        .with_max_bounce(20)
         .build(&mut raytrace_program);
 
     // We only use this texture, so we bind it before render loop and forget about it.
@@ -159,7 +159,7 @@ fn main() {
         let sphere_vbo = VertexBufferObject::new::<f32>(
             vec![
             // |x      |y      |z      |radius|
-            //    -1.0,    0.0,    -1.1,   0.5,
+                // -1.0,    0.0,    -1.1,   0.5,
                 0.0,    0.0,    -1.0,   0.5,
                 // 1.0,    0.0,    -1.1,   0.5,
                 0.0,   -100.5,  -1.0,   100.0,

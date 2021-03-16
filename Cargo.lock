@@ -221,17 +221,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "gl_gpupe"
-version = "0.1.0"
-dependencies = [
- "cgmath",
- "gl",
- "image",
- "sdl2",
- "walkdir",
-]
-
-[[package]]
 name = "hermit-abi"
 version = "0.1.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -508,6 +497,17 @@ dependencies = [
  "libc",
  "redox_syscall",
  "xattr",
+]
+
+[[package]]
+name = "tdt4230_raytracer"
+version = "0.1.0"
+dependencies = [
+ "cgmath",
+ "gl",
+ "image",
+ "sdl2",
+ "walkdir",
 ]
 
 [[package]]
