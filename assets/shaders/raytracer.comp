@@ -110,6 +110,7 @@ void main() {
 
     float scale = 1.0 / camera.samples_per_pixel;
     color = clamp(color * scale, 0, 1);
+    color = sqrt(color);
     imageStore(img_output, pixel_coord, vec4(color, 1.0));
 }
 
@@ -127,12 +128,12 @@ vec3 RayColor(Ray r) {
     Ray current_ray = r;
 
     int loop_count = 0;
-    while (loop_count < camera.max_bounce && SpheresHit(current_ray, 0.0, infinity, hit)) {
+    while (loop_count < camera.max_bounce && SpheresHit(current_ray, 0.0001, infinity, hit)) {
         loop_count += 1;
 
         vec3 target = hit.point + hit.normal + RandInUnitSphere(vec2(hit.point.xy));
         vec3 ray_dir = target - hit.point;
-        vec3 ray_point = hit.point + ray_dir * 0.001;
+        vec3 ray_point = hit.point + ray_dir * 0.0001;
         current_ray = CreateRay(ray_point, ray_dir);
     }
 
