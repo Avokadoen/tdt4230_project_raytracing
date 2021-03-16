@@ -44,7 +44,7 @@ impl Chronos {
 
         let mut lock = self.out.lock();
         self.second_tick = 0.0;
-        let msg = format!("\rfps: {}", self.frames_this_second);
+        let msg = format!("\rfps: {}             ", self.frames_this_second);
         match lock.write_all(msg.as_bytes()) {
             _ => () // ignore errors TODO: maybe don't ignore?
         };

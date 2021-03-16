@@ -37,8 +37,18 @@ impl VertexArrayObject {
 
         unsafe {
             gl::GenVertexArrays(1, &mut id);
-    
-            gl::BindVertexArray(id);
+        }
+        let vao = VertexArrayObject {
+            id
+        };
+        vao.append_vbo(attributes, components, vbo);
+
+        vao
+    }
+
+    pub fn append_vbo(&self, attributes: Vec<VertexAttributePointer>, components: usize,  vbo: u32) {
+        unsafe {
+            gl::BindVertexArray(self.id);
             gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
             let stride = (components * std::mem::size_of::<f32>()) as gl::types::GLint;
 
@@ -59,8 +69,5 @@ impl VertexArrayObject {
             gl::BindVertexArray(0);
         }
 
-        VertexArrayObject {
-            id
-        }
     }
 }

@@ -9,3 +9,8 @@ pub mod vao;
 pub mod vbo;
 
 mod utils;
+
+pub enum Material {
+    Lambertian = 0,
+    Metal,
+}

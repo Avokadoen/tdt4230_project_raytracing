@@ -9,7 +9,7 @@ mod utility;
 mod resources;
 
 use resources::Resources;
-use renderer::{camera::CameraBuilder, program::Program, shader::Shader, vao::{
+use renderer::{Material, camera::CameraBuilder, program::Program, shader::Shader, vao::{
         VertexArrayObject,
         VertexAttributePointer
     }, vbo::VertexBufferObject};
@@ -150,26 +150,58 @@ fn main() {
     // TODO: vao might not be needed for shader storage buffer? read spec 
     //       and update code accordingly
     let hittable_vao = { 
-        let attrib = VertexAttributePointer {
-            location: 0,
-            size: 4,
-            offset: 0
-        };
-
         let sphere_vbo = VertexBufferObject::new::<f32>(
             vec![
-            // |x      |y      |z      |radius|
-                // -1.0,    0.0,    -1.1,   0.5,
-                0.0,    0.0,    -1.0,   0.5,
-                // 1.0,    0.0,    -1.1,   0.5,
-                0.0,   -100.5,  -1.0,   100.0,
+            // |Position          |Radius  |Albedo        |Padding
+                0.0,  0.0,   -1.0, 0.5,     0.7, 0.3, 0.3, 0.0,    
+                0.0, -100.5, -1.0, 100.0,   0.8, 0.8, 0.0, 0.0, 
+               -1.0,  0.0,   -1.0, 0.5,     0.8, 0.8, 0.8, 0.0, 
+                1.0,  0.0,   -1.0, 0.5,     0.8, 0.6, 0.2, 0.0,    
             ],
             gl::ARRAY_BUFFER,
             gl::DYNAMIC_DRAW
         );
-        unsafe { gl::BindBufferBase(gl::SHADER_STORAGE_BUFFER, 1, sphere_vbo.id()); } 
+        let pos_attrib = VertexAttributePointer {
+            location: 0,
+            size: 3,
+            offset: 0
+        };
+        let radius_attrib = VertexAttributePointer {
+            location: 1,
+            size: 1,
+            offset: 3
+        };
+        let albedo_attrib = VertexAttributePointer {
+            location: 2,
+            size: 3,
+            offset: 4
+        };
+        let padding_attrib = VertexAttributePointer {
+            location: 3,
+            size: 1,
+            offset: 7
+        };
+        unsafe { gl::BindBufferBase(gl::SHADER_STORAGE_BUFFER, 0, sphere_vbo.id()); } 
+        let vao = VertexArrayObject::new(vec![pos_attrib, radius_attrib, albedo_attrib, padding_attrib], 8, sphere_vbo.id());
+        
+        let mat_vbo = VertexBufferObject::new::<u32>(
+            vec![
+                Material::Lambertian as u32,
+                Material::Lambertian as u32,
+                Material::Metal as u32,
+                Material::Metal as u32],
+            gl::ARRAY_BUFFER,
+            gl::STATIC_DRAW
+        );
+        let mat_attrib = VertexAttributePointer {
+            location: 1,
+            size: 1,
+            offset: 0
+        };
+        unsafe { gl::BindBufferBase(gl::SHADER_STORAGE_BUFFER, 1, mat_vbo.id()); } 
+        vao.append_vbo(vec![mat_attrib], 1, mat_vbo.id());
 
-        VertexArrayObject::new(vec![attrib], 4, sphere_vbo.id())
+        vao
     };
 
     {

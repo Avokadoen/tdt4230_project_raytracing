@@ -9,12 +9,21 @@ layout(rgba32f, binding = 0) uniform image2D img_output;
 // Constants
 // See glsl 4.40 spec chapter 4.7.1 for info on infinity
 // https://www.khronos.org/registry/OpenGL/specs/gl/GLSLangSpec.4.40.pdf
+const int MAT_LAMBERTIAN = 0;
+const int MAT_METAL = 1;
+
 const float infinity = 0.001 / 0;
 const float pi = 3.14159265358; // 3.1415926535897932385
+
 
 float DegreesToRadians(float deg) {
     return deg * pi / 180.0;
 }
+bool IsNearZero(vec3 v) {
+    const float s = 0.000001;
+    return (abs(v.x) < s) && (abs(v.y) < s) && (abs(v.z) < s);
+}
+
 
 float Rand(float co) { return fract(sin(co*(91.3458)) * 47453.5453); }
 float Rand(vec2 co){ return fract(sin(dot(co.xy ,vec2(12.9898,78.233))) * 43758.5453); }
@@ -60,6 +69,7 @@ struct HitRecord {
     vec3 point;
     vec3 normal;
     float t;
+    int index; 
     bool front_face;
 };
 
@@ -92,18 +102,32 @@ Ray CameraGetRay(Camera camera, float u, float v);
 struct Sphere {
     vec3 center; 
     float radius;
+    // TODO: albedo does not belong here as it would waste 
+    //       memory later with many objects
+    vec3 albedo; 
+    // TODO: figure out why(if) this is needed
+    // Code breaks without padding. As I understand std430
+    // it should not require padding, but this works so ....
+    float padding; 
 };                     
 // Read about std here: https://www.khronos.org/opengl/wiki/Interface_Block_(GLSL)#Memory_layout
-layout (std430, binding = 1) buffer SphereBuffer {
+layout (std430, binding = 0) buffer SphereBuffer {
     Sphere spheres[];
 };
 bool SpheresHit(Ray r, float t_min, float t_max, out HitRecord hit); 
-bool SphereHit(Sphere sphere, Ray r, float t_min, float t_max, out HitRecord hit);
+bool SphereHit(int index, Ray r, float t_min, float t_max, out HitRecord hit);
+
+// All hittable's material (currently align with spheres)
+layout (std430, binding = 1) buffer MaterialBuffer {
+    int materials[];
+};
+bool scatter_lambertian(int index, Ray r_in, HitRecord hit, out vec3 attenuation, out Ray scattered);
+bool scatter_metal(int index, Ray r_in, HitRecord hit, out vec3 attenuation, out Ray scattered);
 
 void main() {
     ivec2 pixel_coord = ivec2(gl_GlobalInvocationID.x, gl_GlobalInvocationID.y);
 
-    vec3 color = vec3(0, 0, 0);
+    vec3 color = vec3(0.0, 0.0, 0.0);
     for (int i = 0; i < camera.samples_per_pixel; i++) {
         float x = float(pixel_coord.x);
         float y = float(pixel_coord.y);
@@ -128,24 +152,40 @@ vec3 RayAt(Ray r, float t) {
     return fma(vec3(t), r.direction, r.origin);
 }
 
+// TODO: This function has way too much branching for glsl ...
 vec3 RayColor(Ray r) {
     HitRecord hit;
     Ray current_ray = r;
-
+    vec3 accumulative_attenuation = vec3(1.0);
     int loop_count = 0;
     while (loop_count < camera.max_bounce && SpheresHit(current_ray, 0.001, infinity, hit)) {
         loop_count += 1;
 
-        vec3 target = hit.point + hit.normal + RandInHemisphere(vec2(hit.point.xy), hit.normal);
-        vec3 ray_dir = target - hit.point;
-        current_ray = CreateRay(hit.point, ray_dir);
-    }
+        Ray scattered;
+        vec3 attenuation;
 
+        bool result = false;
+        switch (materials[hit.index]) {
+        case MAT_LAMBERTIAN: 
+            result = scatter_lambertian(hit.index, current_ray, hit, attenuation, scattered);
+            break;
+        case MAT_METAL: 
+            result = scatter_metal(hit.index, current_ray, hit, attenuation, scattered);
+            break;
+        default: 
+            return vec3(1.0, 0.0, 0.0); // DEBUG
+        }
+
+        if (!result) return vec3(0.0);
+        accumulative_attenuation *= attenuation;
+        current_ray = scattered;
+    }
     if (loop_count == camera.max_bounce) return vec3(0, 0, 0);
+    if (loop_count > 0) return accumulative_attenuation;
 
     float t = 0.5 * (current_ray.direction.y + 1.0);
     vec3 background_color = (1.0 - t) * vec3(1.0, 1.0, 1.0) + t * vec3(0.5, 0.7, 1.0);
-    return pow(0.5, loop_count) * background_color;
+    return background_color;
 }
 
 Ray CameraGetRay(Camera camera, float u, float v) {
@@ -158,7 +198,7 @@ bool SpheresHit(Ray r, float t_min, float t_max, out HitRecord hit) {
     bool has_hit = false;
     float closest = t_max;
     for (int i = 0; i < spheres.length(); i++) {
-        if (SphereHit(spheres[i], r, t_min, closest, temp_hit)) {
+        if (SphereHit(i, r, t_min, closest, temp_hit)) {
             has_hit = true;
             closest = temp_hit.t;
             hit = temp_hit;
@@ -168,8 +208,9 @@ bool SpheresHit(Ray r, float t_min, float t_max, out HitRecord hit) {
     return has_hit;
 } 
 
-bool SphereHit(Sphere sphere, Ray r, float t_min, float t_max, out HitRecord hit) {
+bool SphereHit(int index, Ray r, float t_min, float t_max, out HitRecord hit) {
     // calculate vector from sphere to ray origin
+    Sphere sphere = spheres[index];
     vec3 oc = r.origin - sphere.center; 
     float a = dot(r.direction, r.direction);
     float half_b = dot(oc, r.direction);
@@ -196,6 +237,22 @@ bool SphereHit(Sphere sphere, Ray r, float t_min, float t_max, out HitRecord hit
     hit.point = point;
     vec3 normal = normalize((point - sphere.center) / sphere.radius);
     hit.front_face = dot(r.direction, normal) < 0; 
-    hit.normal = normal * (1 - (2 * float(!hit.front_face)));
+    hit.normal = normalize(normal * (1 - (2 * float(!hit.front_face))));
+    hit.index = index;
     return true;
+}
+
+bool scatter_lambertian(int index, Ray r_in, HitRecord hit, out vec3 attenuation, out Ray scattered) {
+    vec3 scatter_dir = hit.normal + RandInHemisphere(hit.point.xy, hit.normal);
+    if (IsNearZero(scatter_dir)) scatter_dir = hit.normal;
+    scattered = CreateRay(hit.point, scatter_dir);
+    attenuation = spheres[index].albedo;
+    return true;
+}
+
+bool scatter_metal(int index, Ray r_in, HitRecord hit, out vec3 attenuation, out Ray scattered) {
+    vec3 reflected = reflect(r_in.direction, normalize(hit.normal));
+    scattered = CreateRay(hit.point, reflected);
+    attenuation = spheres[index].albedo;
+    return (dot(scattered.direction, hit.normal) > 0);
 }
