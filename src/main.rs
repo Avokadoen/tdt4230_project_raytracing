@@ -36,8 +36,8 @@ fn main() {
         gl_attr.set_context_version(4, 5);
     }
 
-    let window_x: u32 = 910;
-    let window_y: u32 = 512;
+    let window_x: u32 = 800;
+    let window_y: u32 = 500;
 
     let window = video_subsystem
         .window("TDT4230 Raytracer", window_x, window_y)
@@ -139,8 +139,8 @@ fn main() {
         .with_aspect_ratio(window_x as f32 / window_y as f32 )
         .with_origin(Vector3::<f32>::new(0.0, 0.0, 0.0))
         .with_viewport_height(2.0)
-        .with_sample_per_pixel(4) // the bigger resolution, the less we need of this
-        .with_max_bounce(20)
+        .with_sample_per_pixel(100) // the bigger resolution, the less we need of this
+        .with_max_bounce(50)
         .build(&mut raytrace_program);
 
     // We only use this texture, so we bind it before render loop and forget about it.

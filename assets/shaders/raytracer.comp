@@ -34,13 +34,18 @@ vec3 RandVec3(vec2 co, float min, float max) {
     float z = Rand(vec2(co.x + y, co.y + y), min, max);
     return vec3(x, y, z);
 }
-vec3 RandInUnitSphere(vec2 co) {
-    vec3 p = RandVec3(co, -1, 1);
-    // TODO: remove while loop (use a formula or something that can guarantee dot(p, p) >= 1.0)
-    while (dot(p, p) >= 1.0) {
-        p = RandVec3(co, -1, 1); // shrink vector
+vec3 RandUnitVector(vec2 co) {
+    return normalize(RandVec3(co, -1, 1));
+}
+vec3 RandInHemisphere(vec2 co, vec3 normal) {
+    vec3 in_unit_sphere = RandVec3(co, -1, 1);
+    while (dot(in_unit_sphere, in_unit_sphere) >= 1) {
+        in_unit_sphere = RandVec3(co, -1, 1);
     }
-    return p;
+    if (dot(in_unit_sphere, normal) > 0.0) // In the same hemisphere as the normal
+        return in_unit_sphere;
+    else
+        return -in_unit_sphere;
 }
 
 struct Ray {
@@ -128,13 +133,12 @@ vec3 RayColor(Ray r) {
     Ray current_ray = r;
 
     int loop_count = 0;
-    while (loop_count < camera.max_bounce && SpheresHit(current_ray, 0.0001, infinity, hit)) {
+    while (loop_count < camera.max_bounce && SpheresHit(current_ray, 0.001, infinity, hit)) {
         loop_count += 1;
 
-        vec3 target = hit.point + hit.normal + RandInUnitSphere(vec2(hit.point.xy));
+        vec3 target = hit.point + hit.normal + RandInHemisphere(vec2(hit.point.xy), hit.normal);
         vec3 ray_dir = target - hit.point;
-        vec3 ray_point = hit.point + ray_dir * 0.0001;
-        current_ray = CreateRay(ray_point, ray_dir);
+        current_ray = CreateRay(hit.point, ray_dir);
     }
 
     if (loop_count == camera.max_bounce) return vec3(0, 0, 0);
