@@ -1,4 +1,4 @@
-use std::time::Instant;
+use std::{io::{Stdout, Write}, time::Instant};
 
 pub struct Chronos {
     now: Instant,
@@ -9,6 +9,7 @@ pub struct Chronos {
     second_tick: f64,
     // Amount of frames so far this frame
     frames_this_second: u32,
+    out: Stdout,
 }
 
 impl Default for Chronos {
@@ -18,7 +19,8 @@ impl Default for Chronos {
             last: Instant::now(),
             delta_time: 0.0,
             second_tick: 0.0,
-            frames_this_second: 0
+            frames_this_second: 0,
+            out: std::io::stdout()
         }
     }
 }
@@ -36,10 +38,19 @@ impl Chronos {
         self.delta_time = (self.last.elapsed().as_millis() - self.now.elapsed().as_millis()) as f64 / 1000.0;
         self.second_tick += self.delta_time;
         self.frames_this_second += 1;
-        if self.second_tick > 1.0 {
-            self.second_tick = 0.0;
-            println!("fps: {}", self.frames_this_second);
-            self.frames_this_second = 0;
+        if self.second_tick < 1.0 {
+            return;
         }
+
+        let mut lock = self.out.lock();
+        self.second_tick = 0.0;
+        let msg = format!("\rfps: {}", self.frames_this_second);
+        match lock.write_all(msg.as_bytes()) {
+            _ => () // ignore errors TODO: maybe don't ignore?
+        };
+        match lock.flush().unwrap() {
+            _ => ()
+        }
+        self.frames_this_second = 0;
     }
 }
