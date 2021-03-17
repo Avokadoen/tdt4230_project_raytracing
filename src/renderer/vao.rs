@@ -32,7 +32,7 @@ impl VertexArrayObject {
     }
 
     // TODO: components can be retrieved from attributes
-    pub fn new(attributes: Vec<VertexAttributePointer>, components: usize, vbo: u32) -> Self {
+    pub fn new(attributes: Vec<VertexAttributePointer>, vbo: u32) -> Self {
         let mut id: GLuint = 0;
 
         unsafe {
@@ -41,15 +41,20 @@ impl VertexArrayObject {
         let vao = VertexArrayObject {
             id
         };
-        vao.append_vbo(attributes, components, vbo);
+        vao.append_vbo(attributes, vbo);
 
         vao
     }
 
-    pub fn append_vbo(&self, attributes: Vec<VertexAttributePointer>, components: usize,  vbo: u32) {
+    pub fn append_vbo(&self, attributes: Vec<VertexAttributePointer>, vbo: u32) {
         unsafe {
             gl::BindVertexArray(self.id);
             gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
+           
+            let components = match attributes.iter().max_by(|a, b| a.location.cmp(&b.location)) {
+                Some(a) => a.offset + a.size as usize,
+                None => 0, // TODO: ERROR
+            };
             let stride = (components * std::mem::size_of::<f32>()) as gl::types::GLint;
 
             for attribute in attributes {

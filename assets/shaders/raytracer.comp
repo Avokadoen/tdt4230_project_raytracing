@@ -102,27 +102,48 @@ Ray CameraGetRay(Camera camera, float u, float v);
 struct Sphere {
     vec3 center; 
     float radius;
-    // TODO: albedo does not belong here as it would waste 
-    //       memory later with many objects
-    vec3 albedo; 
-    // TODO: figure out why(if) this is needed
-    // Code breaks without padding. As I understand std430
-    // it should not require padding, but this works so ....
-    float padding; 
-};                     
+    // float as all data is in the same vbo,
+    // materials should be limited anyways so this should not 
+    // cause too much problems (famous last words?)
+    float material_index; 
+
+    // TODO: find use for these floats. Could just include albedo since
+    //       we need 3 floats anyways. One problem here is that using a vec3
+    //       does not work (link below talks about vendors not implementing vec3)
+    //       in this context properly).
+    // According to link below this should not be needed ...
+    float padding1;
+    float padding2;
+    float padding3;
+};                    
 // Read about std here: https://www.khronos.org/opengl/wiki/Interface_Block_(GLSL)#Memory_layout
 layout (std430, binding = 0) buffer SphereBuffer {
     Sphere spheres[];
 };
+vec3 SphereAlbedo(int index);
 bool SpheresHit(Ray r, float t_min, float t_max, out HitRecord hit); 
 bool SphereHit(int index, Ray r, float t_min, float t_max, out HitRecord hit);
 
-// All hittable's material (currently align with spheres)
+struct Material {
+    int type;
+    int attribute_index;
+    int albedo_index;
+};
 layout (std430, binding = 1) buffer MaterialBuffer {
-    int materials[];
+    Material materials[];
 };
 bool scatter_lambertian(int index, Ray r_in, HitRecord hit, out vec3 attenuation, out Ray scattered);
 bool scatter_metal(int index, Ray r_in, HitRecord hit, out vec3 attenuation, out Ray scattered);
+
+struct Albedo {
+    vec3 color;
+};
+layout (std430, binding = 2) buffer AlbedoBuffer {
+    Albedo albedos[];
+};
+layout (std430, binding = 3) buffer MetalBuffer {
+    float fuzz[];
+};
 
 void main() {
     ivec2 pixel_coord = ivec2(gl_GlobalInvocationID.x, gl_GlobalInvocationID.y);
@@ -165,7 +186,8 @@ vec3 RayColor(Ray r) {
         vec3 attenuation;
 
         bool result = false;
-        switch (materials[hit.index]) {
+        int m_index = int(spheres[hit.index].material_index);
+        switch (materials[m_index].type) {
         case MAT_LAMBERTIAN: 
             result = scatter_lambertian(hit.index, current_ray, hit, attenuation, scattered);
             break;
@@ -191,6 +213,12 @@ vec3 RayColor(Ray r) {
 Ray CameraGetRay(Camera camera, float u, float v) {
     vec3 ray_dir =  fma(camera.horizontal, vec3(u), camera.lower_left_corner) + fma(vec3(v), camera.vertical, -camera.origin);
     return CreateRay(camera.origin, ray_dir);
+}
+
+vec3 SphereAlbedo(int index) {
+    int mat_index = int(spheres[index].material_index);
+    Material mat = materials[mat_index];
+    return albedos[mat.albedo_index].color;
 }
 
 bool SpheresHit(Ray r, float t_min, float t_max, out HitRecord hit) {
@@ -246,13 +274,15 @@ bool scatter_lambertian(int index, Ray r_in, HitRecord hit, out vec3 attenuation
     vec3 scatter_dir = hit.normal + RandInHemisphere(hit.point.xy, hit.normal);
     if (IsNearZero(scatter_dir)) scatter_dir = hit.normal;
     scattered = CreateRay(hit.point, scatter_dir);
-    attenuation = spheres[index].albedo;
+    attenuation = SphereAlbedo(index);
     return true;
 }
 
 bool scatter_metal(int index, Ray r_in, HitRecord hit, out vec3 attenuation, out Ray scattered) {
     vec3 reflected = reflect(r_in.direction, normalize(hit.normal));
-    scattered = CreateRay(hit.point, reflected);
-    attenuation = spheres[index].albedo;
+    Material mat = materials[int(spheres[index].material_index)];
+    float fuzz = fuzz[mat.attribute_index];
+    scattered = CreateRay(hit.point, reflected + fuzz * RandInHemisphere(hit.point.xy, hit.normal));
+    attenuation = SphereAlbedo(index);
     return (dot(scattered.direction, hit.normal) > 0);
 }
