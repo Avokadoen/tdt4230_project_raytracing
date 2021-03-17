@@ -150,81 +150,89 @@ fn main() {
     // TODO: vao might not be needed for shader storage buffer? read spec 
     //       and update code accordingly
     let hittable_vao = { 
-        let sphere_vbo = VertexBufferObject::new::<f32>(
-            vec![
-            // |Position          |Radius  |Mat index|Padding |
-                0.0,  0.0,   -1.0, 0.5,     0.0,      0.0, 0.0, 0.0, 
-                0.0, -100.5, -1.0, 100.0,   1.0,      0.0, 0.0, 0.0,
-               -1.0,  0.0,   -1.0, 0.5,     2.0,      0.0, 0.0, 0.0,
-                1.0,  0.0,   -1.0, 0.5,     3.0,      0.0, 0.0, 0.0,
-            ],
-            gl::ARRAY_BUFFER,
-            gl::STATIC_DRAW
-        );
-        let sphere_attrib = VertexAttributePointer {
-            location: 0,
-            size: 8,
-            offset: 0
+        let vao = {
+            let sphere_vbo = VertexBufferObject::new::<f32>(
+                vec![
+                // |Position          |Radius  |Mat index|Padding |
+                    0.0,  0.0,   -1.0, 0.5,     0.0,      0.0, 0.0, 0.0, 
+                    0.0, -100.5, -1.0, 100.0,   1.0,      0.0, 0.0, 0.0,
+                   -1.0,  0.0,   -1.0, 0.5,     2.0,      0.0, 0.0, 0.0,
+                    1.0,  0.0,   -1.0, 0.5,     3.0,      0.0, 0.0, 0.0,
+                ],
+                gl::ARRAY_BUFFER,
+                gl::STATIC_DRAW
+            );
+            let sphere_attrib = VertexAttributePointer {
+                location: 0,
+                size: 8,
+                offset: 0
+            };
+            unsafe { gl::BindBufferBase(gl::SHADER_STORAGE_BUFFER, 0, sphere_vbo.id()); } 
+            VertexArrayObject::new(vec![sphere_attrib], sphere_vbo.id()) 
         };
-        unsafe { gl::BindBufferBase(gl::SHADER_STORAGE_BUFFER, 0, sphere_vbo.id()); } 
-        let vao = VertexArrayObject::new(vec![sphere_attrib], sphere_vbo.id()); 
+       
+        {
+            let lambe = Material::Lambertian as u32;
+            let metal = Material::Metal as u32;
+            let mat_vbo = VertexBufferObject::new::<u32>(
+                vec![
+                // |Type  |Attrib |Albedo index|
+                    lambe,  0,      0,
+                    lambe,  0,      1, 
+                    metal,  0,      2,  
+                    metal,  1,      3,
+                ],
+                gl::ARRAY_BUFFER,
+                gl::STATIC_DRAW
+            );
+            unsafe { gl::BindBufferBase(gl::SHADER_STORAGE_BUFFER, 1, mat_vbo.id()); } 
+            let mat_attrib = VertexAttributePointer {
+                location: 0,
+                size: 3,
+                offset: 0
+            };
+            vao.append_vbo(vec![mat_attrib], mat_vbo.id());
+        }
         
-        let lambe = Material::Lambertian as u32;
-        let metal = Material::Metal as u32;
-        let mat_vbo = VertexBufferObject::new::<u32>(
-            vec![
-            // |Type  |Attrib |Albedo index|
-                lambe,  0,      0,
-                lambe,  0,      1, 
-                metal,  0,      2,  
-                metal,  1,      3,
-            ],
-            gl::ARRAY_BUFFER,
-            gl::STATIC_DRAW
-        );
-        unsafe { gl::BindBufferBase(gl::SHADER_STORAGE_BUFFER, 1, mat_vbo.id()); } 
-        let mat_attrib = VertexAttributePointer {
-            location: 0,
-            size: 3,
-            offset: 0
-        };
-        vao.append_vbo(vec![mat_attrib], mat_vbo.id());
-        
-        let albedo_vbo = VertexBufferObject::new::<f32>(
-            vec![
-            // |Albedo        |Padding|
-                0.7, 0.3, 0.3, 0.0,  
-                0.8, 0.8, 0.0, 0.0,
-                0.8, 0.8, 0.8, 0.0,
-                0.8, 0.6, 0.2, 0.0,
-            ],
-            gl::ARRAY_BUFFER,
-            gl::STATIC_DRAW
-        );
-        let mat_attrib = VertexAttributePointer {
-            location: 0,
-            size: 4,
-            offset: 0
-        };
-        unsafe { gl::BindBufferBase(gl::SHADER_STORAGE_BUFFER, 2, albedo_vbo.id()); } 
-        vao.append_vbo(vec![mat_attrib], albedo_vbo.id());
+        {
+            let albedo_vbo = VertexBufferObject::new::<f32>(
+                vec![
+                // |Albedo        |Padding|
+                    0.7, 0.3, 0.3, 0.0,  
+                    0.8, 0.8, 0.0, 0.0,
+                    0.8, 0.8, 0.8, 0.0,
+                    0.8, 0.6, 0.2, 0.0,
+                ],
+                gl::ARRAY_BUFFER,
+                gl::STATIC_DRAW
+            );
+            let mat_attrib = VertexAttributePointer {
+                location: 0,
+                size: 4,
+                offset: 0
+            };
+            unsafe { gl::BindBufferBase(gl::SHADER_STORAGE_BUFFER, 2, albedo_vbo.id()); } 
+            vao.append_vbo(vec![mat_attrib], albedo_vbo.id());
+        }
 
-        let metal_vbo = VertexBufferObject::new::<f32>(
-            vec![
-            // |fuzz|
-                0.3,  
-                1.0,
-            ],
-            gl::ARRAY_BUFFER,
-            gl::STATIC_DRAW
-        );
-        let metal_attrib = VertexAttributePointer {
-            location: 0,
-            size: 1,
-            offset: 0
-        };
-        unsafe { gl::BindBufferBase(gl::SHADER_STORAGE_BUFFER, 3, albedo_vbo.id()); } 
-        vao.append_vbo(vec![metal_attrib], metal_vbo.id());
+        {
+            let metal_vbo = VertexBufferObject::new::<f32>(
+                vec![
+                // |Fuzz |Padding
+                    0.3, 
+                    1.0,
+                ],
+                gl::ARRAY_BUFFER,
+                gl::STATIC_DRAW
+            );
+            let metal_attrib = VertexAttributePointer {
+                location: 0,
+                size: 1,
+                offset: 0
+            };
+            unsafe { gl::BindBufferBase(gl::SHADER_STORAGE_BUFFER, 3, metal_vbo.id()); } 
+            vao.append_vbo(vec![metal_attrib], metal_vbo.id());
+        }
 
         vao
     };

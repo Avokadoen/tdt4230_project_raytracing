@@ -141,8 +141,11 @@ struct Albedo {
 layout (std430, binding = 2) buffer AlbedoBuffer {
     Albedo albedos[];
 };
+struct Metal {
+    float fuzz;
+};
 layout (std430, binding = 3) buffer MetalBuffer {
-    float fuzz[];
+    Metal metal[];
 };
 
 void main() {
@@ -281,7 +284,7 @@ bool scatter_lambertian(int index, Ray r_in, HitRecord hit, out vec3 attenuation
 bool scatter_metal(int index, Ray r_in, HitRecord hit, out vec3 attenuation, out Ray scattered) {
     vec3 reflected = reflect(r_in.direction, normalize(hit.normal));
     Material mat = materials[int(spheres[index].material_index)];
-    float fuzz = fuzz[mat.attribute_index];
+    float fuzz = metal[mat.attribute_index].fuzz;
     scattered = CreateRay(hit.point, reflected + fuzz * RandInHemisphere(hit.point.xy, hit.normal));
     attenuation = SphereAlbedo(index);
     return (dot(scattered.direction, hit.normal) > 0);
