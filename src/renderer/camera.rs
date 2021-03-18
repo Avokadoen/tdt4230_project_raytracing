@@ -1,21 +1,22 @@
-use cgmath::{InnerSpace, Vector3};
+use cgmath::{InnerSpace, Quaternion, Rotation, Vector3};
 
 use crate::renderer::texture::Texture;
 
 use super::program::Program;
 
-// TODO: camera can probably hold and create render texture to avoid programatic errors
 // TODO: camera should have a say when it comes to viewport and program window
+// TODO: some of the cameras variables can be remove as they are only used when 
+//       they are calculated (horizontal, vertical, lower_left_corner ...)
 pub struct Camera {
     pub horizontal: Vector3::<f32>,
     pub vertical: Vector3::<f32>,
     pub viewport_width: f32,
     pub viewport_height: f32,
-    
+
     pub lower_left_corner: Vector3::<f32>,
     pub view_dir: Vector3::<f32>,
-    pub up_dir: Vector3::<f32>,
     pub origin: Vector3::<f32>,
+    orientation: Quaternion<f32>,
     
     // TODO: these are only i32 because it is easier to send to GPU
     pub samples_per_pixel: i32,
@@ -27,18 +28,49 @@ pub struct Camera {
 }
 
 impl Camera {
-    // TODO: move camera, set origin and rotation when we get so far :)
-    pub fn translate(&mut self, by: &Vector3::<f32>, deltatime: f64, program: &mut Program) {
-        self.origin += *by * deltatime as f32;
+    pub fn translate(&mut self, program: &mut Program, by: &Vector3::<f32>, deltatime: f64) {
+        self.origin += self.orientation.rotate_vector(*by * deltatime as f32);
+        self.propagate_changes(program);
+    }
+     
+    // turn in x axis
+    pub fn turn_pitch(&mut self, program: &mut Program, angle: f32) {
+        // Axis angle to quaternion: https://www.euclideanspace.com/maths/geometry/rotations/conversions/angleToQuaternion/index.htm
+        let h_angle = angle * 0.5;
+        let i = h_angle.sin();
+        let w = h_angle.cos();
+        let rotation = Quaternion::new(w, i, 0.0, 0.0).normalize();
+        
+        // conjugate(r) * p * r
+        self.view_dir = rotation.rotate_vector(self.view_dir).normalize();
+        self.orientation = self.orientation * rotation;
+        self.propagate_changes(program);
+    }
 
-        let w = (-self.view_dir).normalize();
-        let u = self.up_dir.cross(w).normalize();
-        let v = w.cross(u);
+    // turn in y axis
+    pub fn turn_yaw(&mut self, program: &mut Program, angle: f32) {
+        // Axis angle to quaternion: https://www.euclideanspace.com/maths/geometry/rotations/conversions/angleToQuaternion/index.htm
+        let h_angle = angle * 0.5;
+        let j = h_angle.sin();
+        let w = h_angle.cos();
+        let rotation = Quaternion::new(w, 0.0, j, 0.0).normalize();
+  
+        self.view_dir = rotation.rotate_vector(self.view_dir).normalize();
+        self.orientation = self.orientation * rotation;
+        self.propagate_changes(program);
+    }
 
-        let horizontal = u * self.viewport_width;
-        let vertical = v * self.viewport_height;
-        self.lower_left_corner = self.origin - horizontal/2.0 - vertical/2.0 - w;
+    fn propagate_changes(&mut self, program: &mut Program) {
+        let forward = (-self.view_dir).normalize();
+        let right = Vector3::unit_y().cross(forward).normalize();
+        let up = forward.cross(right).normalize();
 
+        self.horizontal = right * self.viewport_width;
+        self.vertical = up * self.viewport_height;
+        self.lower_left_corner = self.origin - self.horizontal * 0.5 - self.vertical * 0.5 - forward;
+
+        program.set_vector3_f32("camera.horizontal", self.horizontal).unwrap();
+        program.set_vector3_f32("camera.vertical", self.vertical).unwrap();
         program.set_vector3_f32("camera.lower_left_corner", self.lower_left_corner).unwrap();
         program.set_vector3_f32("camera.origin", self.origin).unwrap();
     }
@@ -50,7 +82,6 @@ pub struct CameraBuilder {
     aspect_ratio: Option<f32>,
     viewport_height: Option<f32>,
     view_dir: Option<Vector3::<f32>>,
-    up_dir: Option<Vector3::<f32>>,
     origin: Option<Vector3::<f32>>,
     samples_per_pixel: Option<i32>,
     max_bounce: Option<i32>,
@@ -66,7 +97,6 @@ impl CameraBuilder {
             aspect_ratio: None,
             viewport_height: None,
             view_dir: None,
-            up_dir: None,
             origin: None,
             samples_per_pixel: None,
             max_bounce: None,
@@ -82,31 +112,30 @@ impl CameraBuilder {
         let viewport_width = aspect_ratio * viewport_height;
         
         let view_dir = self.view_dir.unwrap_or(Vector3::new(0.0, 0.0, 1.0));
-        let up_dir = self.up_dir.unwrap_or(Vector3::new(0.0, 1.0, 0.0));
         let origin = self.origin.unwrap_or(Vector3::new(0.0, 0.0, 0.0));
         
-        let w = (origin - view_dir).normalize();
-        let u = up_dir.cross(w).normalize();
-        let v = w.cross(u);
+        let forward = (-view_dir).normalize();
+        let right = Vector3::unit_y().cross(forward).normalize();
+        let up = forward.cross(right).normalize();
 
-        let horizontal = u * viewport_width;
-        let vertical = v * viewport_height;
-        let lower_left_corner = origin - horizontal/2.0 - vertical/2.0 - w;
+        let horizontal: Vector3<f32> = right * viewport_width;
+        let vertical: Vector3<f32> = up * viewport_height;
+        
+        let lower_left_corner = origin - horizontal * 0.5 - vertical * 0.5 - forward;
 
         let image_height = (self.image_width as f32 / aspect_ratio) as i32;
 
         let sample_per_pixel = self.samples_per_pixel.unwrap_or(10);
         let max_bounce = self.max_bounce.unwrap_or(3);
-
         let camera = Camera {
             horizontal,
             vertical,
             viewport_width,
             viewport_height,
             lower_left_corner,
-            view_dir,
-            up_dir,
+            view_dir: view_dir.normalize(),
             origin,
+            orientation: Quaternion::new(1.0, 0.0, 0.0, 0.0),
             image_width: self.image_width,
             image_height,
             render_texture: Texture::new( 
@@ -141,11 +170,6 @@ impl CameraBuilder {
         return self;
     }
 
-    pub fn with_up_dir(&mut self, up_dir: Vector3::<f32>) -> &mut CameraBuilder {
-        self.up_dir = Some(up_dir);
-        return self;
-    }
-
     pub fn with_origin(&mut self, origin: Vector3::<f32>) -> &mut CameraBuilder {
         self.origin = Some(origin);
         return self;
@@ -171,7 +195,6 @@ fn initial_uniforms(camera: &Camera, program: &mut Program) {
     
     program.set_vector3_f32("camera.horizontal", camera.horizontal).unwrap();
     program.set_vector3_f32("camera.vertical", camera.vertical).unwrap();
-
     program.set_vector3_f32("camera.lower_left_corner", camera.lower_left_corner).unwrap();
     program.set_vector3_f32("camera.origin", camera.origin).unwrap();
     

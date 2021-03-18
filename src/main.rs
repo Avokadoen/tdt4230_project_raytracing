@@ -34,13 +34,13 @@ fn main() {
         gl_attr.set_context_version(4, 5);
     }
 
-    let window_x: u32 = 800;
-    let window_y: u32 = 500;
+    let window_x: u32 = 500;
+    let window_y: u32 = 300;
 
     let window = video_subsystem
         .window("TDT4230 Raytracer", window_x, window_y)
         .opengl()
-        // .resizable()
+        // .fullscreen()
         .build()
         .unwrap();
 
@@ -136,10 +136,9 @@ fn main() {
     let mut camera = CameraBuilder::new(90.0, window_x as i32)
         .with_aspect_ratio(window_x as f32 / window_y as f32 )
         .with_view_dir(Vector3::<f32>::new(0.0, 0.0, -1.0))
-        .with_up_dir(Vector3::<f32>::new(0.0,1.0, 0.0))
         .with_origin(Vector3::<f32>::new(0.0, 0.0, 0.0))
         .with_viewport_height(2.0)
-        .with_sample_per_pixel(4) // the bigger resolution, the less we need of this
+        .with_sample_per_pixel(4)
         .with_max_bounce(8)
         .build(&mut raytrace_program);
 
@@ -260,6 +259,9 @@ fn main() {
                 vec![
                 // |Fuzz |
                     0.1,
+                    0.3,
+                    0.4,
+                    0.8,
                 ],
                 gl::ARRAY_BUFFER,
                 gl::STATIC_DRAW
@@ -303,24 +305,30 @@ fn main() {
 
 
     let mut chronos: Chronos = Default::default();
-
     // TODO: lock screen from being stretched
     let mut event_pump = sdl.event_pump().unwrap();
     'main: loop {
         chronos.tick();
 
+        // TODO: move to seperate thread
         for event in event_pump.poll_iter() {
             match event {
                 Event::Quit { .. } => break 'main,
                 Event::KeyDown { keycode, .. } => match keycode {
                     Some(k) => {
                         match k {
-                            Keycode::W => camera.translate(&Direction::Front.into_vector3(), chronos.delta_time(), &mut raytrace_program),
-                            Keycode::A => camera.translate(&Direction::Left.into_vector3(),  chronos.delta_time(), &mut raytrace_program),
-                            Keycode::S => camera.translate(&Direction::Back.into_vector3(),  chronos.delta_time(), &mut raytrace_program),
-                            Keycode::D => camera.translate(&Direction::Rigth.into_vector3(), chronos.delta_time(), &mut raytrace_program),
-                            Keycode::Space => camera.translate(&Direction::Up.into_vector3(), chronos.delta_time(), &mut raytrace_program),
-                            Keycode::LCtrl => camera.translate(&Direction::Down.into_vector3(), chronos.delta_time(), &mut raytrace_program),
+                            Keycode::W => camera.translate(&mut raytrace_program, &Direction::Front.into_vector3(), chronos.delta_time()),
+                            Keycode::A => camera.translate(&mut raytrace_program, &Direction::Left.into_vector3(),  chronos.delta_time()),
+                            Keycode::S => camera.translate(&mut raytrace_program, &Direction::Back.into_vector3(),  chronos.delta_time()),
+                            Keycode::D => camera.translate(&mut raytrace_program, &Direction::Rigth.into_vector3(), chronos.delta_time()),
+                            Keycode::Space => camera.translate(&mut raytrace_program, &Direction::Up.into_vector3(), chronos.delta_time()),
+                            Keycode::LCtrl => camera.translate(&mut raytrace_program, &Direction::Down.into_vector3(), chronos.delta_time()),
+                            Keycode::Up => camera.turn_pitch(&mut raytrace_program, -2.0 * chronos.delta_time() as f32),
+                            Keycode::Down => camera.turn_pitch(&mut raytrace_program, 2.0 * chronos.delta_time() as f32),
+                            Keycode::Left => camera.turn_yaw(&mut raytrace_program, 2.0 * chronos.delta_time() as f32),
+                            Keycode::Right => camera.turn_yaw(&mut raytrace_program, -2.0 * chronos.delta_time() as f32),
+                            Keycode::Escape => break 'main,
+
                             _ => (),
                         }
                     },
@@ -329,7 +337,7 @@ fn main() {
                 _ => {}
             }
         }
-
+        
         hittable_vao.bind();
         dispatch_compute(&mut raytrace_program, window_x, window_y);
         VertexArrayObject::unbind();
