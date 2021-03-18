@@ -31,7 +31,7 @@ impl Camera {
     pub fn translate(&mut self, by: &Vector3::<f32>, deltatime: f64, program: &mut Program) {
         self.origin += *by * deltatime as f32;
 
-        let w = (self.origin - self.view_dir).normalize();
+        let w = (-self.view_dir).normalize();
         let u = self.up_dir.cross(w).normalize();
         let v = w.cross(u);
 
