@@ -14,9 +14,9 @@ pub struct Camera {
     pub viewport_height: f32,
 
     pub lower_left_corner: Vector3::<f32>,
-    pub view_dir: Vector3::<f32>,
     pub origin: Vector3::<f32>,
-    orientation: Quaternion<f32>,
+    pitch: Quaternion<f32>,
+    yaw: Quaternion<f32>,
     
     // TODO: these are only i32 because it is easier to send to GPU
     pub samples_per_pixel: i32,
@@ -29,7 +29,7 @@ pub struct Camera {
 
 impl Camera {
     pub fn translate(&mut self, program: &mut Program, by: &Vector3::<f32>, deltatime: f64) {
-        self.origin += self.orientation.rotate_vector(*by * deltatime as f32);
+        self.origin += self.orientation().rotate_vector(*by * deltatime as f32);
         self.propagate_changes(program);
     }
      
@@ -39,29 +39,25 @@ impl Camera {
         let h_angle = angle * 0.5;
         let i = h_angle.sin();
         let w = h_angle.cos();
-        let rotation = Quaternion::new(w, i, 0.0, 0.0).normalize();
-        
-        // conjugate(r) * p * r
-        self.view_dir = rotation.rotate_vector(self.view_dir).normalize();
-        self.orientation = self.orientation * rotation;
+        self.pitch = self.pitch * Quaternion::new(w, i, 0.0, 0.0).normalize();
         self.propagate_changes(program);
     }
 
     // turn in y axis
     pub fn turn_yaw(&mut self, program: &mut Program, angle: f32) {
-        // Axis angle to quaternion: https://www.euclideanspace.com/maths/geometry/rotations/conversions/angleToQuaternion/index.htm
         let h_angle = angle * 0.5;
         let j = h_angle.sin();
         let w = h_angle.cos();
-        let rotation = Quaternion::new(w, 0.0, j, 0.0).normalize();
-  
-        self.view_dir = rotation.rotate_vector(self.view_dir).normalize();
-        self.orientation = self.orientation * rotation;
+        self.yaw = self.yaw * Quaternion::new(w, 0.0, j, 0.0).normalize();
         self.propagate_changes(program);
     }
 
+    fn orientation(&self) -> Quaternion<f32> {
+        return (self.yaw * self.pitch).normalize();
+    }
+
     fn propagate_changes(&mut self, program: &mut Program) {
-        let forward = (-self.view_dir).normalize();
+        let forward = (self.orientation().rotate_vector(Vector3::unit_z())).normalize();
         let right = Vector3::unit_y().cross(forward).normalize();
         let up = forward.cross(right).normalize();
 
@@ -76,16 +72,15 @@ impl Camera {
     }
 }
 
+// TODO: with pitch, yaw
 pub struct CameraBuilder {
     vertical_fov: f32,
     image_width: i32,
     aspect_ratio: Option<f32>,
     viewport_height: Option<f32>,
-    view_dir: Option<Vector3::<f32>>,
     origin: Option<Vector3::<f32>>,
     samples_per_pixel: Option<i32>,
     max_bounce: Option<i32>,
-
 }
 
 impl CameraBuilder {
@@ -96,7 +91,6 @@ impl CameraBuilder {
             image_width,
             aspect_ratio: None,
             viewport_height: None,
-            view_dir: None,
             origin: None,
             samples_per_pixel: None,
             max_bounce: None,
@@ -111,10 +105,9 @@ impl CameraBuilder {
         let viewport_height = self.viewport_height.unwrap_or(2.0) * h;
         let viewport_width = aspect_ratio * viewport_height;
         
-        let view_dir = self.view_dir.unwrap_or(Vector3::new(0.0, 0.0, 1.0));
         let origin = self.origin.unwrap_or(Vector3::new(0.0, 0.0, 0.0));
         
-        let forward = (-view_dir).normalize();
+        let forward = (Vector3::unit_z()).normalize();
         let right = Vector3::unit_y().cross(forward).normalize();
         let up = forward.cross(right).normalize();
 
@@ -133,9 +126,9 @@ impl CameraBuilder {
             viewport_width,
             viewport_height,
             lower_left_corner,
-            view_dir: view_dir.normalize(),
             origin,
-            orientation: Quaternion::new(1.0, 0.0, 0.0, 0.0),
+            pitch: Quaternion::new(1.0, 0.0, 0.0, 0.0),
+            yaw: Quaternion::new(1.0, 0.0, 0.0, 0.0),
             image_width: self.image_width,
             image_height,
             render_texture: Texture::new( 
@@ -162,11 +155,6 @@ impl CameraBuilder {
 
     pub fn with_viewport_height(&mut self, viewport_height: f32) -> &mut CameraBuilder {
         self.viewport_height = Some(viewport_height);
-        return self;
-    }
-
-    pub fn with_view_dir(&mut self, view_dir: Vector3::<f32>) -> &mut CameraBuilder {
-        self.view_dir = Some(view_dir);
         return self;
     }
 

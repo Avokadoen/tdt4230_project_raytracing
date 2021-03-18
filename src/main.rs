@@ -135,7 +135,6 @@ fn main() {
 
     let mut camera = CameraBuilder::new(90.0, window_x as i32)
         .with_aspect_ratio(window_x as f32 / window_y as f32 )
-        .with_view_dir(Vector3::<f32>::new(0.0, 0.0, -1.0))
         .with_origin(Vector3::<f32>::new(0.0, 0.0, 0.0))
         .with_viewport_height(2.0)
         .with_sample_per_pixel(4)
@@ -278,7 +277,7 @@ fn main() {
         {
             let dielectric_vbo = VertexBufferObject::new::<f32>(
                 vec![
-                // |Fuzz |
+                // |Ir |
                     1.5,
                 ],
                 gl::ARRAY_BUFFER,
@@ -323,8 +322,8 @@ fn main() {
                             Keycode::D => camera.translate(&mut raytrace_program, &Direction::Rigth.into_vector3(), chronos.delta_time()),
                             Keycode::Space => camera.translate(&mut raytrace_program, &Direction::Up.into_vector3(), chronos.delta_time()),
                             Keycode::LCtrl => camera.translate(&mut raytrace_program, &Direction::Down.into_vector3(), chronos.delta_time()),
-                            Keycode::Up => camera.turn_pitch(&mut raytrace_program, -2.0 * chronos.delta_time() as f32),
-                            Keycode::Down => camera.turn_pitch(&mut raytrace_program, 2.0 * chronos.delta_time() as f32),
+                            Keycode::Up => camera.turn_pitch(&mut raytrace_program, 2.0 * chronos.delta_time() as f32),
+                            Keycode::Down => camera.turn_pitch(&mut raytrace_program, -2.0 * chronos.delta_time() as f32),
                             Keycode::Left => camera.turn_yaw(&mut raytrace_program, 2.0 * chronos.delta_time() as f32),
                             Keycode::Right => camera.turn_yaw(&mut raytrace_program, -2.0 * chronos.delta_time() as f32),
                             Keycode::Escape => break 'main,
