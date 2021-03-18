@@ -16,10 +16,6 @@ const int MAT_DIELECTRIC = 2;
 const float infinity = 0.001 / 0;
 const float pi = 3.14159265358; // 3.1415926535897932385
 
-
-float DegreesToRadians(float deg) {
-    return deg * pi / 180.0;
-}
 bool IsNearZero(vec3 v) {
     const float s = 0.000001;
     return (abs(v.x) < s) && (abs(v.y) < s) && (abs(v.z) < s);
@@ -208,7 +204,7 @@ vec3 RayColor(Ray r) {
             result = ScatterDielectric(hit.index, current_ray, hit, attenuation, scattered);
             break;
         default: 
-            return vec3(1.0, 0.0, 0.0); // DEBUG
+            return vec3(0.0, 0.0, 0.0); // DEBUG
         }
 
         if (!result) return vec3(0.0);

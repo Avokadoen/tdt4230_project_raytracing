@@ -14,10 +14,7 @@ use renderer::{Material, camera::CameraBuilder, program::Program, shader::Shader
         VertexAttributePointer
     }, vbo::VertexBufferObject};
 
-use utility::{
-    input_handler::InputHandler,
-    chronos::Chronos,
-};
+use utility::{Direction, chronos::Chronos};
 
 // TODO: currently lots of opengl stuff. Move all of it into renderer module
 
@@ -135,12 +132,14 @@ fn main() {
         Program::unbind();
     }
 
-    let camera = CameraBuilder::new(window_x as i32)
+    let mut camera = CameraBuilder::new(90.0, window_x as i32)
         .with_aspect_ratio(window_x as f32 / window_y as f32 )
+        .with_view_dir(Vector3::<f32>::new(0.0, 0.0, -1.0))
+        .with_up_dir(Vector3::<f32>::new(0.0,1.0, 0.0))
         .with_origin(Vector3::<f32>::new(0.0, 0.0, 0.0))
         .with_viewport_height(2.0)
-        .with_sample_per_pixel(100) // the bigger resolution, the less we need of this
-        .with_max_bounce(50)
+        .with_sample_per_pixel(4) // the bigger resolution, the less we need of this
+        .with_max_bounce(8)
         .build(&mut raytrace_program);
 
     // We only use this texture, so we bind it before render loop and forget about it.
@@ -221,7 +220,7 @@ fn main() {
             let metal_vbo = VertexBufferObject::new::<f32>(
                 vec![
                 // |Fuzz |
-                    0.2,
+                    0.1,
                 ],
                 gl::ARRAY_BUFFER,
                 gl::STATIC_DRAW
@@ -265,7 +264,6 @@ fn main() {
 
 
     let mut chronos: Chronos = Default::default();
-    let mut input_handler: InputHandler = Default::default();
 
     // TODO: lock screen from being stretched
     let mut event_pump = sdl.event_pump().unwrap();
@@ -276,25 +274,23 @@ fn main() {
             match event {
                 Event::Quit { .. } => break 'main,
                 Event::KeyDown { keycode, .. } => match keycode {
-                    Some(_) => input_handler.on_key_down(keycode),
+                    Some(k) => {
+                        match k {
+                            Keycode::W => camera.translate(&Direction::Front.into_vector3(), chronos.delta_time(), &mut raytrace_program),
+                            Keycode::A => camera.translate(&Direction::Left.into_vector3(),  chronos.delta_time(), &mut raytrace_program),
+                            Keycode::S => camera.translate(&Direction::Back.into_vector3(),  chronos.delta_time(), &mut raytrace_program),
+                            Keycode::D => camera.translate(&Direction::Rigth.into_vector3(), chronos.delta_time(), &mut raytrace_program),
+                            Keycode::Space => camera.translate(&Direction::Up.into_vector3(), chronos.delta_time(), &mut raytrace_program),
+                            Keycode::LCtrl => camera.translate(&Direction::Down.into_vector3(), chronos.delta_time(), &mut raytrace_program),
+                            _ => (),
+                        }
+                    },
                     _ => (),
                 }
-                Event::KeyUp { keycode, .. } => input_handler.on_key_up(keycode),
                 _ => {}
             }
         }
 
-        // TODO: this should be done by some sort of observer like pattern, but this will work for now
-        //       as soon as we need runtime config for keybindings this will be a problem
-        for keycode in &input_handler.active_keys {
-            match keycode {
-                Keycode::W => (),
-                Keycode::A => (),
-                Keycode::S => (),
-                Keycode::D => (),
-                _ => ()
-            }
-        }
         hittable_vao.bind();
         dispatch_compute(&mut raytrace_program, window_x, window_y);
         VertexArrayObject::unbind();

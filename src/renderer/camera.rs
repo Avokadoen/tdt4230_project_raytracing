@@ -1,4 +1,4 @@
-use cgmath::Vector3;
+use cgmath::{InnerSpace, Vector3};
 
 use crate::renderer::texture::Texture;
 
@@ -9,8 +9,12 @@ use super::program::Program;
 pub struct Camera {
     pub horizontal: Vector3::<f32>,
     pub vertical: Vector3::<f32>,
+    pub viewport_width: f32,
+    pub viewport_height: f32,
     
     pub lower_left_corner: Vector3::<f32>,
+    pub view_dir: Vector3::<f32>,
+    pub up_dir: Vector3::<f32>,
     pub origin: Vector3::<f32>,
     
     // TODO: these are only i32 because it is easier to send to GPU
@@ -24,26 +28,45 @@ pub struct Camera {
 
 impl Camera {
     // TODO: move camera, set origin and rotation when we get so far :)
+    pub fn translate(&mut self, by: &Vector3::<f32>, deltatime: f64, program: &mut Program) {
+        self.origin += *by * deltatime as f32;
+
+        let w = (self.origin - self.view_dir).normalize();
+        let u = self.up_dir.cross(w).normalize();
+        let v = w.cross(u);
+
+        let horizontal = u * self.viewport_width;
+        let vertical = v * self.viewport_height;
+        self.lower_left_corner = self.origin - horizontal/2.0 - vertical/2.0 - w;
+
+        program.set_vector3_f32("camera.lower_left_corner", self.lower_left_corner).unwrap();
+        program.set_vector3_f32("camera.origin", self.origin).unwrap();
+    }
 }
 
 pub struct CameraBuilder {
+    vertical_fov: f32,
     image_width: i32,
-    focal_length: Option<f32>,
     aspect_ratio: Option<f32>,
     viewport_height: Option<f32>,
+    view_dir: Option<Vector3::<f32>>,
+    up_dir: Option<Vector3::<f32>>,
     origin: Option<Vector3::<f32>>,
     samples_per_pixel: Option<i32>,
     max_bounce: Option<i32>,
+
 }
 
 impl CameraBuilder {
-    pub fn new(image_width: i32) -> CameraBuilder {
+    pub fn new(vertical_fov: f32, image_width: i32) -> CameraBuilder {
         // create the camera builder with defaults
         CameraBuilder {
+            vertical_fov,
             image_width,
-            focal_length: None,
             aspect_ratio: None,
             viewport_height: None,
+            view_dir: None,
+            up_dir: None,
             origin: None,
             samples_per_pixel: None,
             max_bounce: None,
@@ -52,15 +75,23 @@ impl CameraBuilder {
 
     pub fn build(&mut self, program: &mut Program) -> Camera {
         let aspect_ratio = self.aspect_ratio.unwrap_or(16.0 / 9.0);
-        let viewport_height = self.viewport_height.unwrap_or(2.0);
+
+        let theta = self.vertical_fov * std::f32::consts::PI / 180.0;
+        let h = (theta / 2.0).tan();
+        let viewport_height = self.viewport_height.unwrap_or(2.0) * h;
         let viewport_width = aspect_ratio * viewport_height;
         
+        let view_dir = self.view_dir.unwrap_or(Vector3::new(0.0, 0.0, 1.0));
+        let up_dir = self.up_dir.unwrap_or(Vector3::new(0.0, 1.0, 0.0));
         let origin = self.origin.unwrap_or(Vector3::new(0.0, 0.0, 0.0));
         
-        let focal_length = self.focal_length.unwrap_or(1.0);
-        let horizontal = Vector3::<f32>::new(viewport_width, 0.0, 0.0);
-        let vertical = Vector3::<f32>::new(0.0, viewport_height, 0.0);
-        let lower_left_corner = origin - horizontal/2.0 - vertical/2.0 - Vector3::<f32>::new(0.0, 0.0, focal_length);
+        let w = (origin - view_dir).normalize();
+        let u = up_dir.cross(w).normalize();
+        let v = w.cross(u);
+
+        let horizontal = u * viewport_width;
+        let vertical = v * viewport_height;
+        let lower_left_corner = origin - horizontal/2.0 - vertical/2.0 - w;
 
         let image_height = (self.image_width as f32 / aspect_ratio) as i32;
 
@@ -70,7 +101,11 @@ impl CameraBuilder {
         let camera = Camera {
             horizontal,
             vertical,
+            viewport_width,
+            viewport_height,
             lower_left_corner,
+            view_dir,
+            up_dir,
             origin,
             image_width: self.image_width,
             image_height,
@@ -101,6 +136,16 @@ impl CameraBuilder {
         return self;
     }
 
+    pub fn with_view_dir(&mut self, view_dir: Vector3::<f32>) -> &mut CameraBuilder {
+        self.view_dir = Some(view_dir);
+        return self;
+    }
+
+    pub fn with_up_dir(&mut self, up_dir: Vector3::<f32>) -> &mut CameraBuilder {
+        self.up_dir = Some(up_dir);
+        return self;
+    }
+
     pub fn with_origin(&mut self, origin: Vector3::<f32>) -> &mut CameraBuilder {
         self.origin = Some(origin);
         return self;
@@ -120,7 +165,7 @@ impl CameraBuilder {
 
 // Sets all camera variables in the shader 
 fn initial_uniforms(camera: &Camera, program: &mut Program) {
-    // TODO: don't unwrap ... 
+    // TODO: don't unwrap ... (send error to caller) 
     program.set_i32("camera.image_width", camera.image_width).unwrap();
     program.set_i32("camera.image_height", camera.image_height).unwrap();
     
