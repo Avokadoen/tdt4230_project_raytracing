@@ -1,4 +1,5 @@
-use cgmath::Vector3;
+use cgmath::{InnerSpace, Vector3};
+use rand::Rng;
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 
@@ -150,15 +151,41 @@ fn main() {
     //       and update code accordingly
     let hittable_vao = { 
         let vao = {
-            let sphere_vbo = VertexBufferObject::new::<f32>(
-                vec![
+            let mut default_spheres = vec![
                 // |Position          |Radius  |Mat index|Padding |
-                    0.0, -100.5, -1.0,  100.0,  1.0,      0.0, 0.0, 0.0,
-                    0.0,  0.0,   -1.0,  0.5,    0.0,      0.0, 0.0, 0.0, 
-                    1.0,  0.0,   -1.0,  0.5,    3.0,      0.0, 0.0, 0.0,
-                   -1.0,  0.0,   -1.0,  0.5,    2.0,      0.0, 0.0, 0.0,
-                   -1.0,  0.0,   -1.0, -0.4,    2.0,      0.0, 0.0, 0.0, 
-                ],
+                    0.0, -100.5, -1.0,  100.0,  1.0,      0.0, 0.0, 0.0, // big sphere
+                    0.0,  0.0,   -1.0,  0.5,    0.0,      0.0, 0.0, 0.0, // middle sphere
+                    4.0,  0.0,   -1.0,  0.5,    3.0,      0.0, 0.0, 0.0, // right sphere
+                   -4.0,  0.0,   -1.0,  0.5,    2.0,      0.0, 0.0, 0.0, // hollow glass outer 
+                   -4.0,  0.0,   -1.0, -0.4,    2.0,      0.0, 0.0, 0.0, // hollow glass inner
+                    0.0,  0.0,    2.0,  0.5,    2.0,      0.0, 0.0, 0.0, // glass 
+            ];
+
+            let mut all_spheres = Vec::<f32>::with_capacity(default_spheres.len() + 11 * 11);
+            all_spheres.append(&mut default_spheres);
+            let mut rng = rand::thread_rng();
+            let extends = Vector3::<f32>::new(4.0, 0.2, 0.0);
+            for i in 0..11 {
+                for j in 0..11 {
+                    let center = Vector3::<f32>::new(i as f32 + 0.9 * rng.gen::<f32>(), 0.2, j as f32 + 0.9 * rng.gen::<f32>());
+                    
+                    if (center - extends).magnitude() > 0.9{
+                        all_spheres.push(center.x);
+                        all_spheres.push(center.y);
+                        all_spheres.push(center.z);
+                        all_spheres.push(0.2);
+
+                        let mat: u32 = rng.gen_range(0..12);
+                        all_spheres.push(mat as f32);
+                        all_spheres.push(0.0);
+                        all_spheres.push(0.0);
+                        all_spheres.push(0.0);
+                    }
+                }
+            }
+
+            let sphere_vbo = VertexBufferObject::new::<f32>(
+                all_spheres,
                 gl::ARRAY_BUFFER,
                 gl::STATIC_DRAW
             );
@@ -182,6 +209,15 @@ fn main() {
                     lambe,  0,      1, 
                     diele,  0,      2,  
                     metal,  0,      3,
+                    metal,  1,      4,
+                    metal,  2,      5,
+                    metal,  3,      6,
+                    diele,  0,      4,  
+                    diele,  0,      5, 
+                    lambe,  0,      6, 
+                    lambe,  0,      5,
+                    lambe,  0,      4,
+                    lambe,  0,      3, 
                 ],
                 gl::ARRAY_BUFFER,
                 gl::STATIC_DRAW
@@ -199,10 +235,13 @@ fn main() {
             let albedo_vbo = VertexBufferObject::new::<f32>(
                 vec![
                 // |Albedo        |Padding|
-                    0.7, 0.3, 0.3, 0.0,  
+                    0.1, 0.2, 0.5, 0.0, 
                     0.8, 0.8, 0.0, 0.0,
                     0.8, 0.8, 0.8, 0.0,
                     0.8, 0.6, 0.2, 0.0,
+                    0.2, 0.4, 0.8, 0.0,
+                    0.4, 0.8, 0.2, 0.0,
+                    0.2, 0.2, 0.2, 0.0,
                 ],
                 gl::ARRAY_BUFFER,
                 gl::STATIC_DRAW
