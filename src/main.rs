@@ -137,8 +137,8 @@ fn main() {
         .with_aspect_ratio(window_x as f32 / window_y as f32 )
         .with_origin(Vector3::<f32>::new(0.0, 0.0, 0.0))
         .with_viewport_height(2.0)
-        .with_sample_per_pixel(4)
-        .with_max_bounce(8)
+        .with_sample_per_pixel(10)
+        .with_max_bounce(20)
         .build(&mut raytrace_program);
 
     // We only use this texture, so we bind it before render loop and forget about it.
