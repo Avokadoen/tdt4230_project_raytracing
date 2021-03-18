@@ -11,6 +11,7 @@ layout(rgba32f, binding = 0) uniform image2D img_output;
 // https://www.khronos.org/registry/OpenGL/specs/gl/GLSLangSpec.4.40.pdf
 const int MAT_LAMBERTIAN = 0;
 const int MAT_METAL = 1;
+const int MAT_DIELECTRIC = 2;
 
 const float infinity = 0.001 / 0;
 const float pi = 3.14159265358; // 3.1415926535897932385
@@ -23,7 +24,6 @@ bool IsNearZero(vec3 v) {
     const float s = 0.000001;
     return (abs(v.x) < s) && (abs(v.y) < s) && (abs(v.z) < s);
 }
-
 
 float Rand(float co) { return fract(sin(co*(91.3458)) * 47453.5453); }
 float Rand(vec2 co){ return fract(sin(dot(co.xy ,vec2(12.9898,78.233))) * 43758.5453); }
@@ -132,8 +132,9 @@ struct Material {
 layout (std430, binding = 1) buffer MaterialBuffer {
     Material materials[];
 };
-bool scatter_lambertian(int index, Ray r_in, HitRecord hit, out vec3 attenuation, out Ray scattered);
-bool scatter_metal(int index, Ray r_in, HitRecord hit, out vec3 attenuation, out Ray scattered);
+bool ScatterLambertian(int index, Ray r_in, HitRecord hit, out vec3 attenuation, out Ray scattered);
+bool ScatterMetal(int index, Ray r_in, HitRecord hit, out vec3 attenuation, out Ray scattered);
+bool ScatterDielectric(int index, Ray r_in, HitRecord hit, out vec3 attenuation, out Ray scattered);
 
 struct Albedo {
     vec3 color;
@@ -146,6 +147,12 @@ struct Metal {
 };
 layout (std430, binding = 3) buffer MetalBuffer {
     Metal metal[];
+};
+struct Dielectric {
+    float ir;
+};
+layout (std430, binding = 4) buffer DielectricBuffer {
+    Dielectric dielectric[];
 };
 
 void main() {
@@ -192,10 +199,13 @@ vec3 RayColor(Ray r) {
         int m_index = int(spheres[hit.index].material_index);
         switch (materials[m_index].type) {
         case MAT_LAMBERTIAN: 
-            result = scatter_lambertian(hit.index, current_ray, hit, attenuation, scattered);
+            result = ScatterLambertian(hit.index, current_ray, hit, attenuation, scattered);
             break;
         case MAT_METAL: 
-            result = scatter_metal(hit.index, current_ray, hit, attenuation, scattered);
+            result = ScatterMetal(hit.index, current_ray, hit, attenuation, scattered);
+            break;
+        case MAT_DIELECTRIC:
+            result = ScatterDielectric(hit.index, current_ray, hit, attenuation, scattered);
             break;
         default: 
             return vec3(1.0, 0.0, 0.0); // DEBUG
@@ -273,7 +283,7 @@ bool SphereHit(int index, Ray r, float t_min, float t_max, out HitRecord hit) {
     return true;
 }
 
-bool scatter_lambertian(int index, Ray r_in, HitRecord hit, out vec3 attenuation, out Ray scattered) {
+bool ScatterLambertian(int index, Ray r_in, HitRecord hit, out vec3 attenuation, out Ray scattered) {
     vec3 scatter_dir = hit.normal + RandInHemisphere(hit.point.xy, hit.normal);
     if (IsNearZero(scatter_dir)) scatter_dir = hit.normal;
     scattered = CreateRay(hit.point, scatter_dir);
@@ -281,11 +291,44 @@ bool scatter_lambertian(int index, Ray r_in, HitRecord hit, out vec3 attenuation
     return true;
 }
 
-bool scatter_metal(int index, Ray r_in, HitRecord hit, out vec3 attenuation, out Ray scattered) {
+bool ScatterMetal(int index, Ray r_in, HitRecord hit, out vec3 attenuation, out Ray scattered) {
     vec3 reflected = reflect(r_in.direction, normalize(hit.normal));
     Material mat = materials[int(spheres[index].material_index)];
     float fuzz = metal[mat.attribute_index].fuzz;
     scattered = CreateRay(hit.point, reflected + fuzz * RandInHemisphere(hit.point.xy, hit.normal));
     attenuation = SphereAlbedo(index);
     return (dot(scattered.direction, hit.normal) > 0);
+}
+
+// Sclick Approximation
+float reflectance(float cosine, float ref_ratio) {
+    float r0 = pow((1 - ref_ratio) / (1 + ref_ratio), 2);
+    return fma(pow((1 - cosine), 5), (1 - r0), r0);
+}
+
+bool ScatterDielectric(int index, Ray r_in, HitRecord hit, out vec3 attenuation, out Ray scattered) {
+    attenuation = vec3(1.0, 1.0, 1.0);
+    Material mat = materials[int(spheres[index].material_index)];
+    float ir = dielectric[mat.attribute_index].ir;
+    float refraction_ratio = ir;
+    if(hit.front_face) {
+        refraction_ratio = (1.0/ir); 
+    } 
+
+    vec3 unit_direction = normalize(r_in.direction);
+
+    float cos_theta = min(dot(-unit_direction, hit.normal), 1.0);
+    float sin_theta = sqrt(1.0 - cos_theta * cos_theta);
+
+    vec3 direction;
+    bool cannot_refract = refraction_ratio * sin_theta > 1.0;
+    bool should_reflect =  reflectance(cos_theta, refraction_ratio) > Rand(hit.point.xy);
+    if (cannot_refract || should_reflect) {
+        direction = reflect(unit_direction, hit.normal);
+    } else {
+        direction = refract(unit_direction, hit.normal, refraction_ratio);
+    }
+
+    scattered = CreateRay(hit.point, direction);
+    return true;
 }

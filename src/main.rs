@@ -154,10 +154,11 @@ fn main() {
             let sphere_vbo = VertexBufferObject::new::<f32>(
                 vec![
                 // |Position          |Radius  |Mat index|Padding |
-                    0.0,  0.0,   -1.0, 0.5,     0.0,      0.0, 0.0, 0.0, 
-                    0.0, -100.5, -1.0, 100.0,   1.0,      0.0, 0.0, 0.0,
-                   -1.0,  0.0,   -1.0, 0.5,     2.0,      0.0, 0.0, 0.0,
-                    1.0,  0.0,   -1.0, 0.5,     3.0,      0.0, 0.0, 0.0,
+                    0.0, -100.5, -1.0,  100.0,  1.0,      0.0, 0.0, 0.0,
+                    0.0,  0.0,   -1.0,  0.5,    0.0,      0.0, 0.0, 0.0, 
+                    1.0,  0.0,   -1.0,  0.5,    3.0,      0.0, 0.0, 0.0,
+                   -1.0,  0.0,   -1.0,  0.5,    2.0,      0.0, 0.0, 0.0,
+                   -1.0,  0.0,   -1.0, -0.4,    2.0,      0.0, 0.0, 0.0, 
                 ],
                 gl::ARRAY_BUFFER,
                 gl::STATIC_DRAW
@@ -173,14 +174,15 @@ fn main() {
        
         {
             let lambe = Material::Lambertian as u32;
+            let diele = Material::Dielectric as u32;
             let metal = Material::Metal as u32;
             let mat_vbo = VertexBufferObject::new::<u32>(
                 vec![
                 // |Type  |Attrib |Albedo index|
                     lambe,  0,      0,
                     lambe,  0,      1, 
-                    metal,  0,      2,  
-                    metal,  1,      3,
+                    diele,  0,      2,  
+                    metal,  0,      3,
                 ],
                 gl::ARRAY_BUFFER,
                 gl::STATIC_DRAW
@@ -218,9 +220,8 @@ fn main() {
         {
             let metal_vbo = VertexBufferObject::new::<f32>(
                 vec![
-                // |Fuzz |Padding
-                    0.3, 
-                    1.0,
+                // |Fuzz |
+                    0.2,
                 ],
                 gl::ARRAY_BUFFER,
                 gl::STATIC_DRAW
@@ -232,6 +233,24 @@ fn main() {
             };
             unsafe { gl::BindBufferBase(gl::SHADER_STORAGE_BUFFER, 3, metal_vbo.id()); } 
             vao.append_vbo(vec![metal_attrib], metal_vbo.id());
+        }
+
+        {
+            let dielectric_vbo = VertexBufferObject::new::<f32>(
+                vec![
+                // |Fuzz |
+                    1.5,
+                ],
+                gl::ARRAY_BUFFER,
+                gl::STATIC_DRAW
+            );
+            let dielectric_attrib = VertexAttributePointer {
+                location: 0,
+                size: 1,
+                offset: 0
+            };
+            unsafe { gl::BindBufferBase(gl::SHADER_STORAGE_BUFFER, 4, dielectric_vbo.id()); } 
+            vao.append_vbo(vec![dielectric_attrib], dielectric_vbo.id());
         }
 
         vao

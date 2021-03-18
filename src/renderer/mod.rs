@@ -13,4 +13,5 @@ mod utils;
 pub enum Material {
     Lambertian = 0,
     Metal,
+    Dielectric,
 }
