@@ -5,11 +5,10 @@ opengl compute shaders using [Raytracing in one weekend](https://raytracing.gith
 
 ![demo](https://github.com/Avokadoen/tdt4230_project_raytracing/blob/master/camera_wip.gif)
 
-# Dependencies
-
-On windows you will need [mingw](http://mingw-w64.org/doku.php) to compile SDL2. You can read more about it in Rust-SDL2 [readme](https://github.com/Rust-SDL2/rust-sdl2)
-
 # Sources
+
+Using glutin (most of main is taken from this): https://github.com/mgimle/gloom-rs
+
 Thanks Nercury for a great blog about opengl in rust!
 http://nercury.github.io/rust/opengl/tutorial/2018/02/08/opengl-in-rust-from-scratch-00-setup.html
 

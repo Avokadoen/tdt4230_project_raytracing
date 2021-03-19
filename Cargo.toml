@@ -11,10 +11,8 @@ walkdir = "2.3.1"
 gl = "0.14.0"
 image = "0.23.4"
 rand = "0.8.3"
+glutin = "0.26.0"
 
 [dependencies.cgmath]
 version = "0.18.0"
 
-[dependencies.sdl2]
-version = "0.34.0"
-features = ["bundled", "static-link"]
