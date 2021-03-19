@@ -128,31 +128,6 @@ fn main() {
             VertexArrayObject::new(vec![pos, uv], vertices.id())
         };
 
-        // TODO: create a compute shader abstraction, used this in the abstraction somewhere where it can be shared
-        // Retrieve work group count limit
-        let mut work_group_count_limit = [0, 0, 0];
-        unsafe {
-            gl::GetIntegeri_v(gl::MAX_COMPUTE_WORK_GROUP_COUNT, 0, &mut work_group_count_limit[0]);
-            gl::GetIntegeri_v(gl::MAX_COMPUTE_WORK_GROUP_COUNT, 1, &mut work_group_count_limit[1]);
-            gl::GetIntegeri_v(gl::MAX_COMPUTE_WORK_GROUP_COUNT, 2, &mut work_group_count_limit[2]);
-        }
-        let _work_group_count_limit = work_group_count_limit;
-
-        // Retrieve work group size limit
-        let mut work_group_size_limit = [0, 0, 0];
-        unsafe {
-            gl::GetIntegeri_v(gl::MAX_COMPUTE_WORK_GROUP_SIZE, 0, &mut work_group_size_limit[0]);
-            gl::GetIntegeri_v(gl::MAX_COMPUTE_WORK_GROUP_SIZE, 1, &mut work_group_size_limit[1]);
-            gl::GetIntegeri_v(gl::MAX_COMPUTE_WORK_GROUP_SIZE, 2, &mut work_group_size_limit[2]);
-        }
-        let _work_group_size_limit = work_group_size_limit;
-
-        let mut work_group_invocation_limit = 0;
-        unsafe {
-            gl::GetIntegerv(gl::MAX_COMPUTE_WORK_GROUP_INVOCATIONS, &mut work_group_invocation_limit);
-        }
-        let _work_group_invocation_limit = work_group_invocation_limit;
-
         let mut raytrace_program = {
             let shader = Shader::from_resources(&res, "shaders/raytracer.comp").unwrap();
             Program::from_shaders(&[shader]).unwrap()
