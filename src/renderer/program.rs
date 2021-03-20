@@ -15,6 +15,10 @@ pub struct Program {
 }
 
 impl Program {
+    pub fn id(&self) -> GLuint {
+        return self.id;
+    }
+
     pub fn bind(&self) {
         unsafe {
             gl::UseProgram(self.id);
@@ -106,7 +110,7 @@ impl Program {
             unsafe { gl::DetachShader(program_id, shader.id()); }
         }
 
-        // TODO: waste creating a vec every time just to have variables. Redesign this
+        // TODO: waste creating a hashmap every time just to have variables. Redesign this
         Ok(Program { id: program_id, uniforms: HashMap::new() })
     }
  

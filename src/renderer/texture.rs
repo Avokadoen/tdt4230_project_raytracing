@@ -1,22 +1,36 @@
 use gl::types::{GLenum, GLsizei, GLuint};
 
+use super::{InitializeErr, check_for_gl_error};
+
 pub struct Texture {
     id: u32,
     active: GLenum,
+    width: i32,
+    height: i32,
+    depth: i32,
+    target: GLenum,
 }
 
 // TODO: impl Drop glDeleteTextures 
 
 impl Texture {
-    #[allow(dead_code)]
-    pub fn id(&self) -> u32 {
-        self.id
+    pub fn width(&self) -> i32 {
+        self.width
+    }
+
+    pub fn height(&self) -> i32 {
+        self.height
+    }
+
+    pub fn depth(&self) -> i32 {
+        self.depth
     }
 
     pub fn bind(&self) {
         unsafe {
             gl::ActiveTexture(self.active);
-            gl::BindTexture(gl::TEXTURE_2D, self.id);
+            gl::BindTexture(self.target, self.id);
+            check_for_gl_error().unwrap();
         }
     }
 
@@ -24,73 +38,85 @@ impl Texture {
     pub fn unbind(&self) {
         unsafe {
             gl::ActiveTexture(self.active);
-            gl::BindTexture(gl::TEXTURE_2D, 0);
+            gl::BindTexture(self.target, 0);
         }
     }
 
-    pub fn new(active: GLenum, bind_slot: GLuint, internal_format: GLenum, gltype: GLenum, width: GLsizei, heigth: GLsizei) -> Self {
-        let id = prep_texture(active);
+    pub fn new_2d(active: GLenum, bind_slot: GLuint, internal_format: GLenum, format: GLenum, width: GLsizei, height: GLsizei) -> Result<Self, InitializeErr> {       
+        let target = gl::TEXTURE_2D;
+        let id = prep_texture(active, target)?;
         unsafe { 
             gl::TexImage2D(
-                gl::TEXTURE_2D, 
+                target, 
                 0, 
                 internal_format as i32, 
                 width,
-                heigth,
+                height,
                 0, 
-                gltype, 
+                format, 
                 gl::UNSIGNED_BYTE, 
                 std::ptr::null() 
             );
+            check_for_gl_error()?;
             gl::BindImageTexture(bind_slot, id, 0, gl::FALSE, 0, gl::READ_WRITE, internal_format);
+            check_for_gl_error()?;
         }
 
-        Texture {
+        Ok(Texture {
             id,
-            active
-        }
+            active,
+            width,
+            height,
+            depth: 1,
+            target,
+        })
     }
 
-    #[allow(dead_code)]
-    pub fn from_image(image: image::RgbaImage, active: GLenum, bind_slot: GLuint, internal_format: GLenum, gltype: GLenum) -> Self {
-        let flip_image = image::imageops::flip_vertical(&image);
-
-        let id = prep_texture(active);
-        
+    pub fn new_3d(active: GLenum, bind_slot: GLuint, internal_format: GLenum, format: GLenum, width: GLsizei, height: GLsizei, depth: GLsizei) -> Result<Self, InitializeErr> {       
+        let target = gl::TEXTURE_3D;
+        let id = prep_texture(active, target)?;
         unsafe { 
-            gl::TexImage2D(
-                gl::TEXTURE_2D, 
+            gl::TexImage3D(
+                target, 
                 0, 
                 internal_format as i32, 
-                512,
-                512,
+                width,
+                height,
+                depth,
                 0, 
-                gltype, 
+                format, 
                 gl::UNSIGNED_BYTE, 
-                flip_image.into_raw().as_ptr() as *const std::ffi::c_void
+                std::ptr::null() 
             );
+            check_for_gl_error()?;
             gl::BindImageTexture(bind_slot, id, 0, gl::FALSE, 0, gl::READ_WRITE, internal_format);
+            check_for_gl_error()?;
         }
 
-        Texture {
+        Ok(Texture {
             id,
-            active
-        }
+            active,
+            width,
+            height,
+            depth,
+            target,
+        })
     }
 }
 
-fn prep_texture(active: GLenum) -> GLuint {
+fn prep_texture(active: GLenum, target: GLenum) -> Result<GLuint, InitializeErr> {
     let mut id: GLuint = 0;
     
     unsafe { 
         gl::ActiveTexture(active);
         gl::GenTextures(1, &mut id);
-        gl::BindTexture(gl::TEXTURE_2D, id);
-        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_BORDER as i32);
-        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_BORDER as i32);
-        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::NEAREST as i32);
-        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as i32);
+        gl::BindTexture(target, id);
+        gl::TexParameteri(target, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_BORDER as i32);
+        gl::TexParameteri(target, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_BORDER as i32);
+        gl::TexParameteri(target, gl::TEXTURE_MAG_FILTER, gl::NEAREST as i32);
+        gl::TexParameteri(target, gl::TEXTURE_MIN_FILTER, gl::NEAREST as i32);
+        check_for_gl_error()?;
     }
 
-    id
+    Ok(id)
 }

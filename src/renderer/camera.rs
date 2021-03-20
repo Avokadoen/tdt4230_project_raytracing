@@ -2,7 +2,7 @@ use cgmath::{InnerSpace, Quaternion, Rotation, Vector3};
 
 use crate::renderer::texture::Texture;
 
-use super::program::Program;
+use super::{InitializeErr, program::Program};
 
 // TODO: camera should have a say when it comes to viewport and program window
 // TODO: some of the cameras variables can be remove as they are only used when 
@@ -25,18 +25,21 @@ pub struct Camera {
     pub image_width: i32,
     pub image_height: i32,
     pub render_texture: Texture,
+
+    pub turn_rate: f32,
+    pub movement_speed: f32,
 }
 
 impl Camera {
     pub fn translate(&mut self, program: &mut Program, by: &Vector3::<f32>, deltatime: f64) {
-        self.origin += self.orientation().rotate_vector(*by * deltatime as f32);
+        self.origin += self.orientation().rotate_vector(*by * deltatime as f32 * self.movement_speed);
         self.propagate_changes(program);
     }
      
     // turn in x axis
     pub fn turn_pitch(&mut self, program: &mut Program, angle: f32) {
         // Axis angle to quaternion: https://www.euclideanspace.com/maths/geometry/rotations/conversions/angleToQuaternion/index.htm
-        let h_angle = angle * 0.5;
+        let h_angle = angle * self.turn_rate;
         let i = h_angle.sin();
         let w = h_angle.cos();
         self.pitch = self.pitch * Quaternion::new(w, i, 0.0, 0.0).normalize();
@@ -45,7 +48,7 @@ impl Camera {
 
     // turn in y axis
     pub fn turn_yaw(&mut self, program: &mut Program, angle: f32) {
-        let h_angle = angle * 0.5;
+        let h_angle = angle * self.turn_rate;
         let j = h_angle.sin();
         let w = h_angle.cos();
         self.yaw = self.yaw * Quaternion::new(w, 0.0, j, 0.0).normalize();
@@ -70,6 +73,10 @@ impl Camera {
         program.set_vector3_f32("camera.lower_left_corner", self.lower_left_corner).unwrap();
         program.set_vector3_f32("camera.origin", self.origin).unwrap();
     }
+
+    pub fn set_movement_speed(&mut self, movement_speed: f32) {
+        self.movement_speed = movement_speed;
+    }
 }
 
 // TODO: with pitch, yaw
@@ -81,6 +88,8 @@ pub struct CameraBuilder {
     origin: Option<Vector3::<f32>>,
     samples_per_pixel: Option<i32>,
     max_bounce: Option<i32>,
+    turn_rate: Option<f32>,
+    movement_speed: Option<f32>,
 }
 
 impl CameraBuilder {
@@ -94,10 +103,12 @@ impl CameraBuilder {
             origin: None,
             samples_per_pixel: None,
             max_bounce: None,
+            turn_rate: None,
+            movement_speed: None,
         }
     }
 
-    pub fn build(&mut self, program: &mut Program) -> Camera {
+    pub fn build(&mut self, program: &mut Program) -> Result<Camera, InitializeErr> {
         let aspect_ratio = self.aspect_ratio.unwrap_or(16.0 / 9.0);
 
         let theta = self.vertical_fov * std::f32::consts::PI / 180.0;
@@ -120,6 +131,18 @@ impl CameraBuilder {
 
         let sample_per_pixel = self.samples_per_pixel.unwrap_or(10);
         let max_bounce = self.max_bounce.unwrap_or(3);
+        let render_texture = Texture::new_2d( 
+            gl::TEXTURE0, 
+            0, 
+            gl::RGBA32F, 
+            gl::RGBA, 
+            self.image_width, 
+            image_height
+        )?;
+
+        let turn_rate = self.turn_rate.unwrap_or(0.025);
+        let movement_speed = self.movement_speed.unwrap_or(1.0);
+
         let camera = Camera {
             horizontal,
             vertical,
@@ -131,21 +154,16 @@ impl CameraBuilder {
             yaw: Quaternion::new(1.0, 0.0, 0.0, 0.0),
             image_width: self.image_width,
             image_height,
-            render_texture: Texture::new( 
-                gl::TEXTURE0, 
-                0, 
-                gl::RGBA32F, 
-                gl::RGBA, 
-                self.image_width, 
-                image_height
-            ),
+            render_texture,
             samples_per_pixel: sample_per_pixel,
-            max_bounce
+            max_bounce,
+            turn_rate,
+            movement_speed,
         };
 
         initial_uniforms(&camera, program);
 
-        return camera;
+        return Ok(camera);
     }
 
     pub fn with_aspect_ratio(&mut self, aspect_ratio: f32) -> &mut CameraBuilder {

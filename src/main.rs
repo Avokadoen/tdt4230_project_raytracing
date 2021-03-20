@@ -6,10 +6,10 @@ use glutin::{dpi::PhysicalSize, event::{DeviceEvent, ElementState::{Pressed, Rel
 
 use cgmath::{InnerSpace, Vector3};
 use rand::Rng;
-use std::{borrow::BorrowMut, env, path::Path, sync::{Arc, Mutex, RwLock}, thread};
+use std::{env, path::Path, sync::{Arc, Mutex, RwLock}, thread};
 
 use resources::Resources;
-use renderer::{Material, camera::CameraBuilder, program::Program, shader::Shader, vao::{
+use renderer::{Material, camera::{Camera, CameraBuilder}, check_for_gl_error, compute_shader::ComputeShader, octree::{self, Octree}, program::Program, shader::Shader, vao::{
         VertexArrayObject,
         VertexAttributePointer
     }, vbo::VertexBufferObject};
@@ -23,7 +23,7 @@ fn main() {
     
     let el = glutin::event_loop::EventLoop::new();
     
-    let physical_size = PhysicalSize::new(500, 300);
+    let physical_size = PhysicalSize::new(1920, 1080);
 
     let wb = {
         let mut wb  = glutin::window::WindowBuilder::new()
@@ -53,7 +53,6 @@ fn main() {
     };
 
     let cb = glutin::ContextBuilder::new().with_vsync(true);
-
     
     let windowed_context = cb.build_windowed(wb, &el).unwrap();
     if let Err(e) = windowed_context.window().set_cursor_grab(true) {
@@ -124,37 +123,40 @@ fn main() {
                 gl::ARRAY_BUFFER,
                 gl::STATIC_DRAW
             );
-
+            
             VertexArrayObject::new(vec![pos, uv], vertices.id())
         };
 
+        let octree = Octree::new(0).unwrap();
+        octree.bind();
+        let proc_terrain_program = {
+            let shader = Shader::from_resources(&res, "shaders/terrain_generator.comp").unwrap();
+            let program = Program::from_shaders(&[shader]).unwrap();
+            ComputeShader::new(program).unwrap() // TODO: handle this
+        }; 
+        proc_terrain_program.dispatch_compute(2, 2, 2);
+
         let mut raytrace_program = {
             let shader = Shader::from_resources(&res, "shaders/raytracer.comp").unwrap();
-            Program::from_shaders(&[shader]).unwrap()
+            let program = Program::from_shaders(&[shader]).unwrap();
+            ComputeShader::new(program).unwrap() // TODO: handle this
         }; 
 
-        fn dispatch_compute(program: &mut Program, window_x: u32, window_y: u32) {
-            program.bind();
-
-            unsafe {
-                gl::DispatchCompute(window_x, window_y, 1);
-                gl::MemoryBarrier(gl::SHADER_IMAGE_ACCESS_BARRIER_BIT);
-            }
-
-            Program::unbind();
-        }
 
         let mut camera = CameraBuilder::new(90.0, screen_dimensions.width as i32)
             .with_aspect_ratio(screen_dimensions.width as f32 / screen_dimensions.height as f32 )
             .with_origin(Vector3::<f32>::new(0.0, 0.0, 0.0))
             .with_viewport_height(2.0)
-            .with_sample_per_pixel(4)
-            .with_max_bounce(20)
-            .build(&mut raytrace_program);
+            .with_sample_per_pixel(10)
+            .with_max_bounce(10)
+            .build(&mut raytrace_program.program)
+            .unwrap();
 
         // We only use this texture, so we bind it before render loop and forget about it.
         // This is somewhat bad practice, but in our case, the consequenses are non existent
         camera.render_texture.bind();
+
+
 
         // TODO: vao might not be needed for shader storage buffer? read spec 
         //       and update code accordingly
@@ -306,66 +308,49 @@ fn main() {
             vao
         };
 
-        {
-            // TODO: n^3-tree for voxel data: 
-            //       https://developer.nvidia.com/gpugems/gpugems2/part-v-image-oriented-computing/chapter-37-octree-textures-gpu?fbclid=IwAR057O64JgQK8kvI9Wil4NCnGWBG1ueNIoboYATwHhocpxzNIAKnBQBdkNE
-            let mut max_3d_size: i32 = 0;  
-            unsafe { gl::GetIntegerv(gl::MAX_3D_TEXTURE_SIZE, max_3d_size.borrow_mut() as *mut i32); }
-        }
-
-
         let mut chronos: Chronos = Default::default();
-        let turn_rate: f32 = 0.05; // TODO: internal for camera
+        let render_size = (camera.render_texture.width(), camera.render_texture.height(), camera.render_texture.depth());
         loop {
             chronos.tick();
-            
             // Handle keyboard input
             if let Ok(keys) = pressed_keys.lock() {
+                let mut l_shift_used = false;
                 for key in keys.iter() {
                     match key {
-                        VirtualKeyCode::W           => camera.translate(&mut raytrace_program, &Direction::Front.into_vector3(), chronos.delta_time()),
-                        VirtualKeyCode::A           => camera.translate(&mut raytrace_program, &Direction::Left.into_vector3(),  chronos.delta_time()),
-                        VirtualKeyCode::S           => camera.translate(&mut raytrace_program, &Direction::Back.into_vector3(),  chronos.delta_time()),
-                        VirtualKeyCode::D           => camera.translate(&mut raytrace_program, &Direction::Rigth.into_vector3(), chronos.delta_time()),
-                        VirtualKeyCode::Space       => camera.translate(&mut raytrace_program, &Direction::Up.into_vector3(),    chronos.delta_time()),
-                        VirtualKeyCode::LControl    => camera.translate(&mut raytrace_program, &Direction::Down.into_vector3(),  chronos.delta_time()),
+                        VirtualKeyCode::W           => camera.translate(&mut raytrace_program.program, &Direction::Front.into_vector3(), chronos.delta_time()),
+                        VirtualKeyCode::A           => camera.translate(&mut raytrace_program.program, &Direction::Left.into_vector3(),  chronos.delta_time()),
+                        VirtualKeyCode::S           => camera.translate(&mut raytrace_program.program, &Direction::Back.into_vector3(),  chronos.delta_time()),
+                        VirtualKeyCode::D           => camera.translate(&mut raytrace_program.program, &Direction::Rigth.into_vector3(), chronos.delta_time()),
+                        VirtualKeyCode::Space       => camera.translate(&mut raytrace_program.program, &Direction::Up.into_vector3(),    chronos.delta_time()),
+                        VirtualKeyCode::LControl    => camera.translate(&mut raytrace_program.program, &Direction::Down.into_vector3(),  chronos.delta_time()),
+                        VirtualKeyCode::LShift      => {
+                            camera.set_movement_speed(4.0);
+                            l_shift_used = true;
+                        },
                         _ => { }
                     }
                 }
+                if !l_shift_used {
+                    camera.set_movement_speed(1.0);
+                }
             }
+
             // Handle mouse movement. delta contains the x and y movement of the mouse since last frame in pixels
             if let Ok(mut delta) = mouse_delta.lock() {
                 const PRECISION: f32 = 0.0001;
                 if delta.1.abs() > PRECISION {
-                    let amount =  turn_rate * chronos.delta_time() as f32 * -delta.1;
-                    camera.turn_pitch(&mut raytrace_program, amount);
+                    let amount =  chronos.delta_time() as f32 * -delta.1;
+                    camera.turn_pitch(&mut raytrace_program.program, amount);
                 }
                 if delta.0.abs() > PRECISION {
-                    let amount = turn_rate * chronos.delta_time() as f32 * -delta.0;
-                    camera.turn_yaw(&mut raytrace_program, amount);
+                    let amount = chronos.delta_time() as f32 * -delta.0;
+                    camera.turn_yaw(&mut raytrace_program.program, amount);
                 } 
                 *delta = (0.0, 0.0);
             }
-
-            // for event in event_pump.poll_iter() {
-            //     match event {
-            //         Event::Quit { .. } => break 'main,
-            //         Event::KeyDown { keycode, .. } => match keycode {
-            //             Some(k) => {
-            //                 match k {
-            //                   
-
-            //                     _ => (),
-            //                 }
-            //             },
-            //             _ => (),
-            //         }
-            //         _ => {}
-            //     }
-            // }
             
             hittable_vao.bind();
-            dispatch_compute(&mut raytrace_program, screen_dimensions.width, screen_dimensions.height);
+            raytrace_program.dispatch_compute(render_size.0, render_size.1, render_size.2);
             VertexArrayObject::unbind();
 
             quad_program.bind();

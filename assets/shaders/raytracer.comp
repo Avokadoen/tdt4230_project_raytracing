@@ -1,6 +1,8 @@
 #version 450
-layout(local_size_x = 1, local_size_y = 1) in;
+
+layout(local_size_x = 32, local_size_y = 32) in;
 layout(rgba32f, binding = 0) uniform image2D img_output;
+layout(rgba16f, binding = 1) uniform image2D octree;
 
 /*
     This code is based on raytracing in one weekend (https://raytracing.github.io/books/RayTracingInOneWeekend.html)
@@ -85,15 +87,11 @@ struct Camera {
 uniform Camera camera;
 Ray CameraGetRay(Camera camera, float u, float v);
 
-
-// TODO: 6.13. An Abstraction for Hittable Objects
-//       abstraction for hittable on GPU can use 
-//       "location aliasing" (https://www.khronos.org/opengl/wiki/Layout_Qualifier_(GLSL)#Interface_components)
-//       Pad all primitives with the same byte size and specify type using a
-//       enum (int). Using the enum we can find out which alias we are using and bring meaning to the struct 
-//       data and call the correct method. The negative here is the padding meaning we will waste bytes
-//       We can also just keep adding primitives which will bloat our code, but save bytes. It's worth
-//       noting that this is not needed if we go for voxels 
+// TODO: uniform:
+const vec3 octree_min = vec3(1.0, 0.0, -4.0); 
+const float octree_size = 2.0; 
+bool OctreeHit(Ray r, float t_min, float t_max, out HitRecord hit);
+bool CubeHit(vec3 cmin, float size, Ray r, float t_min, float t_max, out HitRecord hit);
 
 struct Sphere {
     vec3 center; 
@@ -185,7 +183,8 @@ vec3 RayColor(Ray r) {
     Ray current_ray = r;
     vec3 accumulative_attenuation = vec3(1.0);
     int loop_count = 0;
-    while (loop_count < camera.max_bounce && SpheresHit(current_ray, 0.001, infinity, hit)) {
+
+    while (loop_count < camera.max_bounce && OctreeHit(current_ray, 0.001, infinity, hit)){ 
         loop_count += 1;
 
         Ray scattered;
@@ -204,7 +203,7 @@ vec3 RayColor(Ray r) {
             result = ScatterDielectric(hit.index, current_ray, hit, attenuation, scattered);
             break;
         default: 
-            return vec3(0.0, 0.0, 0.0); // DEBUG
+            return vec3(0.0, 0.0, 0.0);
         }
 
         if (!result) return vec3(0.0);
@@ -228,6 +227,75 @@ vec3 SphereAlbedo(int index) {
     int mat_index = int(spheres[index].material_index);
     Material mat = materials[mat_index];
     return albedos[mat.albedo_index].color;
+}
+
+bool OctreeHit(Ray r, float t_min, float t_max, out HitRecord hit) {
+    HitRecord temp_hit;
+    bool has_hit = false;
+    float closest = t_max;
+    if (CubeHit(octree_min, octree_size, r, t_min, closest, temp_hit)) {
+        has_hit = true;
+        closest = temp_hit.t;
+        hit = temp_hit;
+        hit.index = 4;
+    }
+    if (CubeHit(vec3(3.0, 0.0, -4.0), 2.0, r, t_min, closest, temp_hit)) {
+        has_hit = true;
+        closest = temp_hit.t;
+        hit = temp_hit;
+        hit.index = 1;
+    }
+    if (CubeHit(vec3(5, 0.0, -4.0), 2.0, r, t_min, closest, temp_hit)) {
+        has_hit = true;
+        closest = temp_hit.t;
+        hit = temp_hit;
+        hit.index = 2;
+    }
+    if (CubeHit(vec3(-100, -201.0, -100.0), 200.0, r, t_min, closest, temp_hit)) {
+        has_hit = true;
+        closest = temp_hit.t;
+        hit = temp_hit;
+        hit.index = 0;
+    }
+    return has_hit;
+}
+
+bool CubeHit(vec3 cmin, float size, Ray r, float t_min, float t_max, out HitRecord hit) {
+    vec3 cmax = cmin + vec3(size);
+    for (int i = 0; i < 3; i++) {
+        float invD = 1.0 / r.direction[i];
+        float t0 = (cmin[i] - r.origin[i]) * invD;
+        float t1 = (cmax[i] - r.origin[i]) * invD;
+        if (invD < 0.0) {
+            float tmp = t0;
+            t0 = t1;
+            t1 = tmp;
+        }
+
+        t_min = max(t0, t_min);
+        t_max = min(t1, t_max);
+
+        if (t_max <= t_min) {
+            return false;
+        }
+    }
+
+    hit.t = t_min;
+    hit.point = RayAt(r, hit.t);
+    // TODO: Hack to compute normal (find a formula for this)
+    //       currently too tired, but the answer is probably obvious
+    vec3 center = (cmin + cmax) / 2;
+    vec3 normal = (hit.point - center);
+    vec3 abs_norm = abs(normal);
+    float keep_x = float(abs_norm.x > abs_norm.y && abs_norm.x > abs_norm.z);
+    float keep_y = float(abs_norm.y > abs_norm.x && abs_norm.y > abs_norm.z);
+    float keep_z = float(abs_norm.z > abs_norm.x && abs_norm.z > abs_norm.y); 
+    normal = normalize(vec3(normal.x * keep_x, normal.y * keep_y, normal.z * keep_z));
+    hit.front_face = dot(r.direction, normal) < 0; 
+    hit.normal = normalize(normal * (1 - (2 * float(!hit.front_face))));
+    // hit.index = 0; // TODO: material
+
+    return true;
 }
 
 bool SpheresHit(Ray r, float t_min, float t_max, out HitRecord hit) {
