@@ -129,12 +129,15 @@ fn main() {
 
         let octree = Octree::new(0).unwrap();
         octree.bind();
-        let proc_terrain_program = {
-            let shader = Shader::from_resources(&res, "shaders/terrain_generator.comp").unwrap();
-            let program = Program::from_shaders(&[shader]).unwrap();
-            ComputeShader::new(program).unwrap() // TODO: handle this
-        }; 
-        proc_terrain_program.dispatch_compute(2, 2, 2);
+        {
+            let proc_terrain_program = {
+                let shader = Shader::from_resources(&res, "shaders/terrain_generator.comp").unwrap();
+                let program = Program::from_shaders(&[shader]).unwrap();
+                ComputeShader::new(program).unwrap() // TODO: handle this
+            }; 
+            // generate initial octree
+            proc_terrain_program.dispatch_compute(2, 2, 2);
+        }
 
         let mut raytrace_program = {
             let shader = Shader::from_resources(&res, "shaders/raytracer.comp").unwrap();

@@ -111,8 +111,8 @@ fn prep_texture(active: GLenum, target: GLenum) -> Result<GLuint, InitializeErr>
         gl::ActiveTexture(active);
         gl::GenTextures(1, &mut id);
         gl::BindTexture(target, id);
-        gl::TexParameteri(target, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_BORDER as i32);
-        gl::TexParameteri(target, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_BORDER as i32);
+        gl::TexParameteri(target, gl::TEXTURE_WRAP_S, gl::REPEAT as i32);
+        gl::TexParameteri(target, gl::TEXTURE_WRAP_T, gl::REPEAT as i32);
         gl::TexParameteri(target, gl::TEXTURE_MAG_FILTER, gl::NEAREST as i32);
         gl::TexParameteri(target, gl::TEXTURE_MIN_FILTER, gl::NEAREST as i32);
         check_for_gl_error()?;

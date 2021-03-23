@@ -25,6 +25,7 @@ pub enum Material {
 #[derive(Debug)]
 pub enum InitializeErr {
     GL(GLenum),
+    InvalidArgument(String),
 }
 
 impl fmt::Display for InitializeErr {
@@ -38,6 +39,7 @@ impl fmt::Display for InitializeErr {
                     _ => write!(f, "got gl error code: {}", code)
                 }
             }
+            InitializeErr::InvalidArgument(s) => write!(f, "{}", s),
         }
     }
 }

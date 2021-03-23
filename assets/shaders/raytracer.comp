@@ -2,7 +2,7 @@
 
 layout(local_size_x = 32, local_size_y = 32) in;
 layout(rgba32f, binding = 0) uniform image2D img_output;
-layout(rgba16f, binding = 1) uniform image2D octree;
+layout(rgba32f, binding = 1) uniform image3D octree;
 
 /*
     This code is based on raytracing in one weekend (https://raytracing.github.io/books/RayTracingInOneWeekend.html)
@@ -88,10 +88,17 @@ uniform Camera camera;
 Ray CameraGetRay(Camera camera, float u, float v);
 
 // TODO: uniform:
-const vec3 octree_min = vec3(1.0, 0.0, -4.0); 
-const float octree_size = 2.0; 
+const vec3 octree_min = vec3(-1.0, -1.0, -3.2); 
+const float octree_scale = 2.0; // world scale
+const float octree_n = 2.0; // size in any axis
+const vec4 a[2] = vec4[2](vec4(1.0, 0.0, 0.0, 1.0), vec4(1.0, 0.0, 0.0, 1.0)); 
+const vec4 b[2] = vec4[2](vec4(0.0), vec4(0.0)); 
+const vec4 octree_fake_texture[2][2][2] = vec4[2][2][2](vec4[2][2](a, b), vec4[2][2](b, b));
+const int octree_max_depth = 1;
+
+// Octree methods
 bool OctreeHit(Ray r, float t_min, float t_max, out HitRecord hit);
-bool CubeHit(vec3 cmin, float size, Ray r, float t_min, float t_max, out HitRecord hit);
+bool CubeHit(vec3 cmin, float size, Ray r, float t_min, inout float t_max, out HitRecord hit);
 
 struct Sphere {
     vec3 center; 
@@ -205,12 +212,11 @@ vec3 RayColor(Ray r) {
         default: 
             return vec3(0.0, 0.0, 0.0);
         }
-
         if (!result) return vec3(0.0);
+        
         accumulative_attenuation *= attenuation;
         current_ray = scattered;
     }
-    if (loop_count == camera.max_bounce) return vec3(0, 0, 0);
     if (loop_count > 0) return accumulative_attenuation;
 
     float t = 0.5 * (current_ray.direction.y + 1.0);
@@ -229,38 +235,8 @@ vec3 SphereAlbedo(int index) {
     return albedos[mat.albedo_index].color;
 }
 
-bool OctreeHit(Ray r, float t_min, float t_max, out HitRecord hit) {
-    HitRecord temp_hit;
-    bool has_hit = false;
-    float closest = t_max;
-    if (CubeHit(octree_min, octree_size, r, t_min, closest, temp_hit)) {
-        has_hit = true;
-        closest = temp_hit.t;
-        hit = temp_hit;
-        hit.index = 4;
-    }
-    if (CubeHit(vec3(3.0, 0.0, -4.0), 2.0, r, t_min, closest, temp_hit)) {
-        has_hit = true;
-        closest = temp_hit.t;
-        hit = temp_hit;
-        hit.index = 1;
-    }
-    if (CubeHit(vec3(5, 0.0, -4.0), 2.0, r, t_min, closest, temp_hit)) {
-        has_hit = true;
-        closest = temp_hit.t;
-        hit = temp_hit;
-        hit.index = 2;
-    }
-    if (CubeHit(vec3(-100, -201.0, -100.0), 200.0, r, t_min, closest, temp_hit)) {
-        has_hit = true;
-        closest = temp_hit.t;
-        hit = temp_hit;
-        hit.index = 0;
-    }
-    return has_hit;
-}
-
-bool CubeHit(vec3 cmin, float size, Ray r, float t_min, float t_max, out HitRecord hit) {
+// TODO: this function causes lag spikes for some reason ...
+bool CubeHit(vec3 cmin, float size, Ray r, float t_min, inout float t_max, out HitRecord hit) {
     vec3 cmax = cmin + vec3(size);
     for (int i = 0; i < 3; i++) {
         float invD = 1.0 / r.direction[i];
@@ -284,18 +260,135 @@ bool CubeHit(vec3 cmin, float size, Ray r, float t_min, float t_max, out HitReco
     hit.point = RayAt(r, hit.t);
     // TODO: Hack to compute normal (find a formula for this)
     //       currently too tired, but the answer is probably obvious
-    vec3 center = (cmin + cmax) / 2;
+    vec3 center = (cmin + cmax) * 0.5;
     vec3 normal = (hit.point - center);
     vec3 abs_norm = abs(normal);
-    float keep_x = float(abs_norm.x > abs_norm.y && abs_norm.x > abs_norm.z);
+    float keep_x = float(abs_norm.x >= abs_norm.y && abs_norm.x >= abs_norm.z);
     float keep_y = float(abs_norm.y > abs_norm.x && abs_norm.y > abs_norm.z);
     float keep_z = float(abs_norm.z > abs_norm.x && abs_norm.z > abs_norm.y); 
     normal = normalize(vec3(normal.x * keep_x, normal.y * keep_y, normal.z * keep_z));
     hit.front_face = dot(r.direction, normal) < 0; 
-    hit.normal = normalize(normal * (1 - (2 * float(!hit.front_face))));
-    // hit.index = 0; // TODO: material
+    hit.normal = normalize(normal * (1.0 - (2.0 * float(!hit.front_face))));
+    hit.index = 0; // TODO: material
 
     return true;
+}
+
+// Octree cell type
+const float EMPTY = 0.1;
+// const float PARENT = 0.5; 
+const float LEAF = 0.9;
+
+// float4 tree_lookup(
+//     uniform sampler3D IndirPool, // Indirection Pool    
+//     uniform float3 invS, // 1 / S    
+//     uniform float N,    
+//     float3 M) // Lookup coordinates    
+// {    
+//     float4 I = float4(0.0, 0.0, 0.0, 0.0);    
+//     float3 MND = M;      
+//     for (float i=0; i<HRDWTREE_MAX_DEPTH; i++) { 
+//         // fixed # of iterations        
+//         float3 P;      
+//         // compute lookup coords. within current node      
+//         P = (MND + floor(0.5 + I.xyz * 255.0)) * invS;      
+//         // access indirection pool      
+//         if (I.w < 0.9) // already in a leaf?          
+//             I = (float4)tex3D(IndirPool, P); // no, continue to next depth     
+//         if (I.w > 0.9)    // a leaf has been reached          
+//             break;  
+//         if (I.w < 0.1) // empty cell        
+//             discard;      // compute pos within next depth grid   (meaing it should return a signal that this is empty and ray should continue t)    
+//         MND = MND * N;    
+//     }    
+//     return (I);  
+// }
+// Does a lookup in the texture octree and returns current cell (pixel)
+// Should only be use in OctreeHit
+vec4 treeLookup(
+    vec3 inv_indirect_pools, // total amount of pools in octree
+    vec3 voxel_coord, // point we are doing lookup with in tree local coordinates
+    out ivec3 out_point,
+    out int depth 
+) {
+    vec4 cell = vec4(0.0);
+    vec3 depth_coords = voxel_coord;
+   
+    // ivec3 dimention = imageSize(octree);
+    for (float i = 0; i <= octree_max_depth; i++) {
+        ivec3 point = ivec3(floor(depth_coords * inv_indirect_pools)); // ivec3((depth_coords + floor(0.5 + cell.xyz * 255.0)) * inv_indirect_pools);
+        if (cell.w <= EMPTY) {  // (0.1) cell is empty
+            return cell; 
+        }
+        if (cell.w < LEAF) {    // (0.9) cell is parent
+            cell = octree_fake_texture[point.x][point.y][point.z];
+        } else {                // cell is leaf
+            break;
+        } 
+        depth_coords = depth_coords * 2;
+        depth = depth + 1;
+        out_point = point;
+    }
+    return cell;
+}
+
+ivec3 voxelCoordAt(Ray r, float t) {
+    vec3 voxel_coord_f = (((RayAt(r, t) - octree_min) / octree_scale) * octree_n);
+    return ivec3(floor(voxel_coord_f));
+}
+
+// Traverse octree and check for hits in leaf nodes
+bool OctreeHit(Ray r, float t_min, float t_max, out HitRecord hit) {
+    vec3 inv_indirect_pools = vec3(1.0); // TODO #define // S = sum(indirection pools)
+    
+    // retrieve octree bound at hit point
+    HitRecord oc_hit;
+    vec4 cell = vec4(0.0);
+    vec3 c_min = octree_min;
+    float c_scale = octree_scale;
+
+    // record t size of octree, return if ray do not go through octree
+    float t_octree_max = t_max;
+    if(!CubeHit(c_min, c_scale, r, t_min, t_octree_max, oc_hit)) {
+        return false;
+    } 
+    float t_stride = oc_hit.t;
+
+    // TODO: this will currently lookup the same voxel_coord twice at first as 
+    //       c_min and c_scale is not properly initialized before end of loop
+    // while cell is empty and we are hitting octree with ray
+    int max_iter = 30; // TODO: uniform
+    int current_iter = 0;
+    while (cell.w < LEAF && current_iter < max_iter) {
+        ivec3 voxel_coord = voxelCoordAt(r, t_stride + 0.0001);
+        if (voxel_coord.x > octree_max_depth + 0.99 || 
+            voxel_coord.y > octree_max_depth + 0.99 || 
+            voxel_coord.z > octree_max_depth + 0.99 ||
+            voxel_coord.x < 0 || voxel_coord.y < 0 || voxel_coord.z < 0
+        ) {
+            break;
+        }
+        ivec3 point;
+        int depth = 1; 
+        // cell = treeLookup(inv_indirect_pools, voxel_coord, point, depth);
+        cell = octree_fake_texture[voxel_coord.x][voxel_coord.y][voxel_coord.z];
+        if (cell.w >= LEAF)
+            break;
+
+        c_scale = octree_scale / depth; 
+        c_min = octree_min + voxel_coord;
+        
+        t_stride = t_octree_max;
+        !CubeHit(c_min, c_scale, r, t_min, t_stride, oc_hit);
+
+        current_iter += 1;
+    }
+    
+    if (cell.w >= LEAF) {
+        hit = oc_hit;
+        return true;
+    }
+    return false;
 }
 
 bool SpheresHit(Ray r, float t_min, float t_max, out HitRecord hit) {
