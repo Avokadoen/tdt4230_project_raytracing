@@ -35,6 +35,7 @@ impl Octree {
         self.structure.bind();
     }
 
+    #[allow(dead_code)]
     pub fn unbind(&self) {
         self.structure.unbind();
     }

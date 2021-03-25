@@ -9,7 +9,7 @@ use rand::Rng;
 use std::{env, path::Path, sync::{Arc, Mutex, RwLock}, thread};
 
 use resources::Resources;
-use renderer::{Material, camera::{Camera, CameraBuilder}, check_for_gl_error, compute_shader::ComputeShader, octree::{self, Octree}, program::Program, shader::Shader, vao::{
+use renderer::{Material, camera::{CameraBuilder}, compute_shader::ComputeShader, octree::{Octree}, program::Program, shader::Shader, vao::{
         VertexArrayObject,
         VertexAttributePointer
     }, vbo::VertexBufferObject};
@@ -23,7 +23,7 @@ fn main() {
     
     let el = glutin::event_loop::EventLoop::new();
     
-    let physical_size = PhysicalSize::new(1920, 1080);
+    let physical_size = PhysicalSize::new(1000, 800);
 
     let wb = {
         let mut wb  = glutin::window::WindowBuilder::new()

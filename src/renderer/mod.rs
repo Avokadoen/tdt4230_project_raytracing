@@ -1,4 +1,5 @@
 use core::fmt;
+use std::{ffi::NulError, fmt::Debug};
 
 use gl::types::GLenum;
 
@@ -22,10 +23,23 @@ pub enum Material {
     Dielectric,
 }
 
+// TODO: split this into different errors
 #[derive(Debug)]
 pub enum InitializeErr {
     GL(GLenum),
     InvalidArgument(String),
+    VariableNotFound(String),
+    TypedVariableNotFound(String, String),
+    InvalidCStr(NulError),
+}
+
+impl InitializeErr {
+    pub fn var_into_typed(self, type_str: &str) -> InitializeErr {
+        match self {
+            Self::VariableNotFound(name) => InitializeErr::TypedVariableNotFound(name, type_str.to_string()),
+            e => e
+        }
+    }
 }
 
 impl fmt::Display for InitializeErr {
@@ -40,6 +54,9 @@ impl fmt::Display for InitializeErr {
                 }
             }
             InitializeErr::InvalidArgument(s) => write!(f, "{}", s),
+            InitializeErr::VariableNotFound(name) => write!(f, "failed to locate uniform {}", name),
+            InitializeErr::TypedVariableNotFound(name, utype) => write!(f, "failed to locate uniform {} with type {}", name, utype),
+            InitializeErr::InvalidCStr(e) => write!(f, "{}", e),
         }
     }
 }

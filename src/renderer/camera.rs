@@ -68,6 +68,7 @@ impl Camera {
         self.vertical = up * self.viewport_height;
         self.lower_left_corner = self.origin - self.horizontal * 0.5 - self.vertical * 0.5 - forward;
 
+        // TODO: only set what has changed
         program.set_vector3_f32("camera.horizontal", self.horizontal).unwrap();
         program.set_vector3_f32("camera.vertical", self.vertical).unwrap();
         program.set_vector3_f32("camera.lower_left_corner", self.lower_left_corner).unwrap();

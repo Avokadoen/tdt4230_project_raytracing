@@ -6,7 +6,7 @@ use gl::types::{
     GLchar,
 };
 
-use super::shader::Shader;
+use super::{InitializeErr, check_for_gl_error, shader::Shader};
 use crate::Resources;
 // TODO: rename?
 pub struct Program {
@@ -32,28 +32,28 @@ impl Program {
     }
 
     // TODO: macro for this
-    pub fn set_i32(&mut self, name: &str, value: i32) -> Result<(), String> {
-        if self.register_uniform(name) {
-            unsafe {
-                gl::ProgramUniform1i(self.id, self.uniforms[name], value);
-            }
-            return Ok(());
+    pub fn set_i32(&mut self, name: &str, value: i32) -> Result<(), InitializeErr> {
+        match self.register_uniform(name) {
+            Ok(()) => {
+                unsafe {
+                    gl::ProgramUniform1i(self.id, self.uniforms[name], value);
+                }
+                return Ok(())
+            },
+            Err(e) => Err(e.var_into_typed("i32"))
         }
-
-        // TODO: proper error handling
-        return Err(format!("failed to find specified i32 {}", name));
     }
 
-    pub fn set_vector3_f32(&mut self, name: &str, value: cgmath::Vector3<f32>) -> Result<(), String> {
-        if self.register_uniform(name) {
-            unsafe {
-                gl::ProgramUniform3f(self.id, self.uniforms[name], value.x, value.y, value.z);
+    pub fn set_vector3_f32(&mut self, name: &str, value: cgmath::Vector3<f32>) -> Result<(), InitializeErr> {
+        match self.register_uniform(name) {
+            Ok(()) => {
+                unsafe {
+                    gl::ProgramUniform3f(self.id, self.uniforms[name], value.x, value.y, value.z);
+                }
+                return Ok(());
             }
-            return Ok(());
+            Err(e) => Err(e.var_into_typed("vec3"))
         }
-
-        // TODO: proper error handling
-        return Err(format!("failed to find specified f32 {}", name));
     }
 
     /// creates a program out of a folder path that contains both a fragment shader and vertex shader
@@ -115,22 +115,27 @@ impl Program {
     }
  
     // TODO: rename as it also checks if it exist
-    fn register_uniform(&mut self, name: &str) -> bool {
+    fn register_uniform(&mut self, name: &str) -> Result<(), InitializeErr> {
         if !self.uniforms.contains_key(name) {
-            let uni_location = unsafe {
-                use std::ffi::CStr;
-                let c_name = CStr::from_ptr(format!("{}\0", name).as_ptr() as *const i8);
-                gl::GetUniformLocation(self.id, c_name.as_ptr())
+            use std::ffi::CString;
+            let c_name = match CString::new(name) {
+                Ok(s) => s,
+                Err(e) => return Err(InitializeErr::InvalidCStr(e))
             };
-
-            if uni_location != -1 {
+            let uni_location = unsafe {
+                gl::GetUniformLocation(self.id, c_name.as_ptr() as *const i8)
+            };
+            
+            unsafe { check_for_gl_error()?; }
+            
+            if uni_location >= 0 {
                 &self.uniforms.insert(String::from(name), uni_location);
             } else {
-                return false;
+                return Err(InitializeErr::VariableNotFound(name.to_string()));
             }
         }
 
-        return true;
+        return Ok(());
     }
 }
 
