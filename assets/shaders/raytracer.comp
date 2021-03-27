@@ -91,28 +91,29 @@ Ray CameraGetRay(Camera camera, float u, float v);
 const vec3 octree_min = vec3(-1.0, -1.0, -3.2); 
 const float octree_scale = 2.0; // world scale
 const float octree_n = 2.0; // size in any axis
+const float octree_float_precision = 255.0;
 
 // Simple(shallow) fake texture
-const int octree_max_depth = 1;
-const vec3 octree_inv_indirect_pools = vec3(1.0); // TODO #define // S = count(indirection pools)
-const vec4 a[2] = vec4[2](vec4(1.0, 0.0, 0.0, 1.0), vec4(1.0, 0.0, 0.0, 1.0)); 
-const vec4 b[2] = vec4[2](vec4(0.0), vec4(0.0)); 
-const vec4 octree_fake_texture[2][2][2] = vec4[2][2][2](vec4[2][2](a, b), vec4[2][2](b, b));
-const vec3 octree_max_dim = vec3(1, 1, 1);
+// const int octree_max_depth = 1;
+// const float octree_inv_indirect_pools = 1.0; // TODO #define // S = count(indirection pools)
+// const vec4 a[2] = vec4[2](vec4(1.0, 0.0, 0.0, 1.0), vec4(1.0, 0.0, 0.0, 1.0)); 
+// const vec4 b[2] = vec4[2](vec4(0.0), vec4(0.0)); 
+// const vec4 octree_fake_texture[2][2][2] = vec4[2][2][2](vec4[2][2](a, b), vec4[2][2](b, b));
+// const vec3 octree_max_dim = vec3(1, 1, 1);
 
 
 // 1 depth fake texture
-// const int octree_max_depth = 2;
-// const vec3 octree_inv_indirect_pools = vec3(3.0); // TODO #define // S = count(indirection pools)
-// const vec4 double_parent[2] = vec4[2](vec4(1.0, 0.0, 0.0, 0.5), vec4(2.0, 0.0, 0.0, 0.5));
-// const vec4 double_leaf[2] = vec4[2](vec4(1.0, 0.0, 0.0, 1.0), vec4(1.0, 0.0, 0.0, 1.0)); 
-// const vec4 empty[2] = vec4[2](vec4(0.0), vec4(0.0)); 
-// const vec4 octree_fake_texture[6][2][2] = vec4[6][2][2](
-//     vec4[2][2](double_parent, empty), vec4[2][2](empty, empty),         // first cell
-//     vec4[2][2](double_leaf, double_leaf), vec4[2][2](double_leaf, double_leaf),     // second cell
-//     vec4[2][2](double_leaf, double_leaf), vec4[2][2](double_leaf, double_leaf)      // third cell
-// );
-// const vec3 octree_max_dim = vec3(5, 1, 1);
+const int octree_max_depth = 2;
+const float octree_inv_indirect_pools = 1.0 / 3.0; // TODO #define // S = count(indirection pools)
+const vec4 double_parent[2] = vec4[2](vec4(1.0, 0.0, 0.0, 0.5), vec4(2.0, 0.0, 0.0, 0.5)); // Left = parent to cell 1, Right = parent cell 2
+const vec4 double_leaf[2] = vec4[2](vec4(1.0, 0.0, 0.0, 1.0), vec4(1.0, 0.0, 0.0, 1.0)); 
+const vec4 empty[2] = vec4[2](vec4(0.0), vec4(0.0)); 
+const vec4 octree_fake_texture[6][2][2] = vec4[6][2][2](
+    vec4[2][2](double_parent, empty), vec4[2][2](empty, empty),         // first cell
+    vec4[2][2](double_leaf, double_leaf), vec4[2][2](double_leaf, double_leaf),     // second cell
+    vec4[2][2](double_leaf, double_leaf), vec4[2][2](double_leaf, double_leaf)      // third cell
+);
+const vec3 octree_max_dim = vec3(5, 1, 1);
 
 
 // Octree methods
@@ -325,7 +326,7 @@ const float LEAF = 0.9;
 // Does a lookup in the texture octree and returns current cell (pixel)
 // Should only be use in OctreeHit
 vec4 treeLookup(
-    vec3 inv_indirect_pools,    // 1 / total amount of pools in octree
+    float inv_indirect_pools,    // 1 / total amount of pools in octree
     vec3 voxel_coord,           // point we are doing lookup with in image coordinates
     out ivec3 out_voxel,
     out int depth 
@@ -336,10 +337,10 @@ vec4 treeLookup(
    
     // ivec3 dimention = imageSize(octree);
     for (float i = 0; i <= octree_max_depth; i++) {
-        vec3 point = (depth_coords + floor(0.5 + cell.xyz * 255.0)) * inv_indirect_pools;
+        vec3 point = (depth_coords + floor(0.5 + cell.xyz * octree_float_precision)) * octree_inv_indirect_pools;
         ivec3 voxel = ivec3(round(point * octree_max_dim));
         out_voxel = voxel;
-        
+
         vec4 cell = octree_fake_texture[voxel.x][voxel.y][voxel.z];
         if (cell.w <= EMPTY || cell.w >= LEAF) { // if cell is not a parent
             return cell;
@@ -374,11 +375,11 @@ bool OctreeHit(Ray r, float t_min, float t_max, out HitRecord hit) {
     int max_iter = 30; // TODO: uniform
     int current_iter = 0;
     while (cell.w < LEAF && current_iter < max_iter) {
-        vec3 voxel_uv = voxelUVAt(r, t_stride + 0.0001);
-        if (voxel_uv.x > 1.0 || 
-            voxel_uv.y > 1.0 || 
-            voxel_uv.z > 1.0 ||
-            voxel_uv.x < -0.0 || voxel_uv.y < -0.0 || voxel_uv.z < -0.0
+        vec3 voxel_uv = voxelUVAt(r, t_stride + 0.001);
+        if (voxel_uv.x > 1.001 || 
+            voxel_uv.y > 1.001 || 
+            voxel_uv.z > 1.001 ||
+            voxel_uv.x < -0.001 || voxel_uv.y < -0.001 || voxel_uv.z < -0.001
         ) {
             break;
         }
