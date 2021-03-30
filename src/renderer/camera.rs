@@ -167,6 +167,11 @@ impl CameraBuilder {
         return Ok(camera);
     }
 
+    pub fn with_turn_rate(&mut self, turn_rate: f32) -> &mut CameraBuilder {
+        self.turn_rate = Some(turn_rate);
+        return self;
+    }
+
     pub fn with_aspect_ratio(&mut self, aspect_ratio: f32) -> &mut CameraBuilder {
         self.aspect_ratio = Some(aspect_ratio);
         return self;

@@ -31,7 +31,6 @@ fn main() {
         .with_inner_size(physical_size)
         .with_always_on_top(true);
         
-
     let mut chronos: Chronos = Default::default();
 
     let args: Vec<String> = env::args().collect();
@@ -42,7 +41,7 @@ fn main() {
             }
             "-f" | "-F" => {
                 wb = wb.with_maximized(true)
-                .with_fullscreen(Some(Fullscreen::Borderless(el.primary_monitor())));
+                    .with_fullscreen(Some(Fullscreen::Borderless(el.primary_monitor())));
             },
             "-h" => {
                 // TODO: c should default to opt-in
@@ -59,9 +58,22 @@ fn main() {
     let cb = glutin::ContextBuilder::new().with_vsync(true);
     
     let windowed_context = cb.build_windowed(wb, &el).unwrap();
-    if let Err(e) = windowed_context.window().set_cursor_grab(true) {
-        panic!("Error grabbing mouse, e: {}", e);
+
+    {
+        // This seems to fail at random on X11, so try a couple of times before panic
+        const MAX_GRAB_ATTEMPTS: u32 = 20;
+        'grab: for x in 0..MAX_GRAB_ATTEMPTS {
+            match windowed_context.window().set_cursor_grab(true) {
+                Ok(()) => break 'grab,
+                Err(e) => {
+                    if x == MAX_GRAB_ATTEMPTS - 1 { 
+                        eprintln!("Error grabbing mouse, e: {}", e);
+                    }
+                }
+            }
+        }
     }
+
     windowed_context.window().set_cursor_visible(false);
 
     // Set up a shared vector for keeping track of currently pressed keys
@@ -73,23 +85,23 @@ fn main() {
     let arc_mouse_delta = Arc::new(Mutex::new((0f32, 0f32)));
     // Make a reference of this tuple to send to the render thread
     let mouse_delta = Arc::clone(&arc_mouse_delta);
-    
+
     // Spawn a separate thread for rendering, so event handling doesn't block rendering
     let render_thread = thread::spawn(move || {
+        // windowed_context.window().
         let sf = windowed_context.window().scale_factor();
-        let screen_dimensions = windowed_context.window().inner_size().to_logical::<u32>(sf);
-
+        let logical_dimensions = windowed_context.window().inner_size().to_logical::<i32>(sf);
 
         // Acquire the OpenGL Context and load the function pointers. This has to be done inside of the renderin thread, because
         // an active OpenGL context cannot safely traverse a thread boundary
         let context = unsafe {
             let c = windowed_context.make_current().unwrap();
-            gl::load_with(|symbol| c.get_proc_address(symbol) as *const _);
+            gl::load_with(|symbol| c.get_proc_address(symbol) as *const c_void);
             c
         };
 
         unsafe {
-            gl::Viewport(0, 0, screen_dimensions.width as i32, screen_dimensions.height as i32); // set viewport
+            gl::Viewport(0, 0, physical_size.width, physical_size.height); // set viewport
             gl::ClearColor(0.0, 0.0, 0.0, 1.0);
         }
 
@@ -150,12 +162,13 @@ fn main() {
         }; 
 
 
-        let mut camera = CameraBuilder::new(90.0, screen_dimensions.width as i32)
-            .with_aspect_ratio(screen_dimensions.width as f32 / screen_dimensions.height as f32 )
+        let mut camera = CameraBuilder::new(90.0, logical_dimensions.width as i32)
+            .with_aspect_ratio(logical_dimensions.width as f32 / logical_dimensions.height as f32 )
             .with_origin(Vector3::<f32>::new(0.0, 0.0, 0.0))
             .with_viewport_height(2.0)
-            .with_sample_per_pixel(10)
-            .with_max_bounce(10)
+            .with_sample_per_pixel(2)
+            .with_max_bounce(4)
+            .with_turn_rate(0.5)
             .build(&mut raytrace_program.program)
             .unwrap();
 
@@ -178,7 +191,7 @@ fn main() {
                        -4.0,  0.0,   -1.0, -0.4,    2.0,      0.0, 0.0, 0.0, // hollow glass inner
                         0.0,  0.0,    2.0,  0.5,    2.0,      0.0, 0.0, 0.0, // glass 
                 ];
-
+ 
                 let mut all_spheres = Vec::<f32>::with_capacity(default_spheres.len() + 11 * 11);
                 all_spheres.append(&mut default_spheres);
                 let mut rng = rand::thread_rng();
@@ -445,6 +458,5 @@ fn main() {
             _ => { }
         }
     });
-
     // texture delete ...
 }
