@@ -6,7 +6,7 @@ use glutin::{dpi::PhysicalSize, event::{DeviceEvent, ElementState::{Pressed, Rel
 
 use cgmath::{InnerSpace, Vector3};
 use rand::Rng;
-use std::{env, path::Path, sync::{Arc, Mutex, RwLock}, thread};
+use std::{env, ffi::c_void, path::Path, sync::{Arc, Mutex, RwLock}, thread};
 
 use resources::Resources;
 use renderer::{Material, camera::{CameraBuilder}, compute_shader::ComputeShader, octree::{Octree}, program::Program, shader::Shader, vao::{
@@ -19,11 +19,17 @@ use utility::{Direction, chronos::Chronos};
 // TODO: currently lots of opengl stuff. Move all of it into renderer module
 
 fn main() {
+    // TODO: viewport and window is still kinda broken on X11
+    //       A visible black bar to the right and top of the screen. 
+    //       migth be a issue between camera logical aspect ratio and viewport physical one
+    // force a scaling of 1 on X11
+    std::env::set_var("WINIT_X11_SCALE_FACTOR", "1"); 
+    
     let res = Resources::from_relative_path(Path::new("assets")).unwrap();
     
     let el = glutin::event_loop::EventLoop::new();
     
-    let physical_size = PhysicalSize::new(1000, 800);
+    let physical_size = PhysicalSize::new(1000, 1000);
 
     let mut wb  = glutin::window::WindowBuilder::new()
         .with_title("TDT4230 Raytracer")
@@ -57,7 +63,7 @@ fn main() {
 
     let cb = glutin::ContextBuilder::new().with_vsync(true);
     
-    let windowed_context = cb.build_windowed(wb, &el).unwrap();
+    let windowed_context = cb.with_vsync(true).build_windowed(wb, &el).unwrap();
 
     {
         // This seems to fail at random on X11, so try a couple of times before panic
@@ -143,17 +149,18 @@ fn main() {
             VertexArrayObject::new(vec![pos, uv], vertices.id())
         };
 
-        let octree = Octree::new(0).unwrap();
-        octree.bind();
-        {
-            let proc_terrain_program = {
-                let shader = Shader::from_resources(&res, "shaders/terrain_generator.comp").unwrap();
-                let program = Program::from_shaders(&[shader]).unwrap();
-                ComputeShader::new(program).unwrap() // TODO: handle this
-            }; 
-            // generate initial octree
-            proc_terrain_program.dispatch_compute(2, 2, 2);
-        }
+        // TODO: rewrite octree to use buffer
+        // let octree = Octree::new(0).unwrap();
+        // octree.bind();
+        // {
+        //     let proc_terrain_program = {
+        //         let shader = Shader::from_resources(&res, "shaders/terrain_generator.comp").unwrap();
+        //         let program = Program::from_shaders(&[shader]).unwrap();
+        //         ComputeShader::new(program).unwrap() // TODO: handle this
+        //     }; 
+        //     // generate initial octree
+        //     proc_terrain_program.dispatch_compute(2, 2, 2);
+        // }
 
         let mut raytrace_program = {
             let shader = Shader::from_resources(&res, "shaders/raytracer.comp").unwrap();
@@ -331,6 +338,7 @@ fn main() {
         let render_size = (camera.render_texture.width(), camera.render_texture.height(), camera.render_texture.depth());
         loop {
             chronos.tick();
+
             // Handle keyboard input
             if let Ok(keys) = pressed_keys.lock() {
                 let mut l_shift_used = false;
