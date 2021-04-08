@@ -8,6 +8,7 @@ pub struct Chronos {
     // Used to count up to 1 second
     second_tick: f64,
     // Amount of frames so far this frame
+    pub display_fps: bool,
     frames_this_second: u32,
     out: Stdout,
 }
@@ -19,6 +20,7 @@ impl Default for Chronos {
             last: Instant::now(),
             delta_time: 0.0,
             second_tick: 0.0,
+            display_fps: true,
             frames_this_second: 0,
             out: std::io::stdout()
         }
@@ -30,7 +32,7 @@ impl Chronos {
     pub fn delta_time(&self) -> f64 {
         self.delta_time
     }
-    
+
     // This need to be called every frame :(
     pub fn tick(&mut self) {
         self.last = self.now;
@@ -42,14 +44,16 @@ impl Chronos {
             return;
         }
 
-        let mut lock = self.out.lock();
-        self.second_tick = 0.0;
-        let msg = format!("\rfps: {}             ", self.frames_this_second);
-        match lock.write_all(msg.as_bytes()) {
-            _ => () // ignore errors TODO: maybe don't ignore?
-        };
-        match lock.flush().unwrap() {
-            _ => ()
+        if self.display_fps {
+            let mut lock = self.out.lock();
+            self.second_tick = 0.0;
+            let msg = format!("\rfps: {}             ", self.frames_this_second);
+            match lock.write_all(msg.as_bytes()) {
+                _ => () // ignore errors TODO: maybe don't ignore?
+            };
+            match lock.flush().unwrap() {
+                _ => ()
+            }
         }
         self.frames_this_second = 0;
     }

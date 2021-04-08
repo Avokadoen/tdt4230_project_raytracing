@@ -9,7 +9,7 @@ use rand::Rng;
 use std::{env, path::Path, sync::{Arc, Mutex, RwLock}, thread};
 
 use resources::Resources;
-use renderer::{Material, camera::{Camera, CameraBuilder}, check_for_gl_error, compute_shader::ComputeShader, octree::{self, Octree}, program::Program, shader::Shader, vao::{
+use renderer::{Material, camera::{CameraBuilder}, compute_shader::ComputeShader, octree::{Octree}, program::Program, shader::Shader, vao::{
         VertexArrayObject,
         VertexAttributePointer
     }, vbo::VertexBufferObject};
@@ -23,34 +23,38 @@ fn main() {
     
     let el = glutin::event_loop::EventLoop::new();
     
-    let physical_size = PhysicalSize::new(1920, 1080);
+    let physical_size = PhysicalSize::new(1000, 800);
 
-    let wb = {
-        let mut wb  = glutin::window::WindowBuilder::new()
-            .with_title("TDT4230 Raytracer")
-            .with_resizable(false)
-            .with_inner_size(physical_size)
-            .with_always_on_top(true);
+    let mut wb  = glutin::window::WindowBuilder::new()
+        .with_title("TDT4230 Raytracer")
+        .with_resizable(false)
+        .with_inner_size(physical_size)
+        .with_always_on_top(true);
+        
 
-        let args: Vec<String> = env::args().collect();
-        for arg in args.iter().skip(1) {
-            match &arg[..] {
-                "-f" | "-F" => {
-                    wb = wb.with_maximized(true)
-                    .with_fullscreen(Some(Fullscreen::Borderless(el.primary_monitor())));
-                },
-                "-h" => {
-                    let h_command = "\n-h => 'display this information'";
-                    let f_command = "\n-f | -F => 'fullscreen mode'"; // TODO: fov and mouse sense should be connected to this somehow
-                    println!("Rendering toy code{}{}", h_command, f_command);
-                    return;
-                },
-                c => eprintln!("Unknown command '{}'", c)
+    let mut chronos: Chronos = Default::default();
+
+    let args: Vec<String> = env::args().collect();
+    for arg in args.iter().skip(1) {
+        match &arg[..] {
+            "-c" => {
+                chronos.display_fps = false
             }
+            "-f" | "-F" => {
+                wb = wb.with_maximized(true)
+                .with_fullscreen(Some(Fullscreen::Borderless(el.primary_monitor())));
+            },
+            "-h" => {
+                // TODO: c should default to opt-in
+                let c_command = "\n-c => 'turn off fps display in terminal'";
+                let h_command = "\n-h => 'display this information'";
+                let f_command = "\n-f | -F => 'fullscreen mode'"; 
+                println!("Rendering toy code{}{}{}", h_command, f_command, c_command);
+                return;
+            },
+            c => eprintln!("Unknown command '{}'", c)
         }
-
-        wb
-    };
+    }
 
     let cb = glutin::ContextBuilder::new().with_vsync(true);
     
@@ -311,7 +315,6 @@ fn main() {
             vao
         };
 
-        let mut chronos: Chronos = Default::default();
         let render_size = (camera.render_texture.width(), camera.render_texture.height(), camera.render_texture.depth());
         loop {
             chronos.tick();
