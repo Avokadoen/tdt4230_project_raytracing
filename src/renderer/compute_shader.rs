@@ -27,8 +27,8 @@ impl ComputeShader {
 
     pub fn dispatch_compute(&self, width: i32, height: i32, depth: i32) {
         self.program.bind();
-        let num_groups_x = (width / self.group_size[0]) as u32;
-        let num_groups_y = (height / self.group_size[1]) as u32;
+        let num_groups_x = (width / self.group_size[0]) as u32 + 1;
+        let num_groups_y = (height / self.group_size[1]) as u32 + 1;
         let num_groups_z = (depth / self.group_size[2]) as u32;
         unsafe {
             gl::DispatchCompute(num_groups_x, num_groups_y, num_groups_z);
