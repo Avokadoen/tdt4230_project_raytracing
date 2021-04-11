@@ -173,9 +173,9 @@ fn main() {
             .with_aspect_ratio(logical_dimensions.width as f32 / logical_dimensions.height as f32 )
             .with_origin(Vector3::<f32>::new(0.0, 0.0, 0.0))
             .with_viewport_height(2.0)
-            .with_sample_per_pixel(2)
-            .with_max_bounce(4)
-            .with_turn_rate(0.5)
+            .with_sample_per_pixel(4)
+            .with_max_bounce(8)
+            .with_turn_rate(0.05)
             .build(&mut raytrace_program.program)
             .unwrap();
 
@@ -415,6 +415,7 @@ fn main() {
     });
 
     // Start the event loop -- This is where window events get handled
+    let mut window_focus = true;
     el.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
 
@@ -424,46 +425,59 @@ fn main() {
                 *control_flow = ControlFlow::Exit;
             }
         }
+        
 
-        match event {
-            Event::WindowEvent { event: WindowEvent::CloseRequested, .. } => {
-                *control_flow = ControlFlow::Exit;
-            },
-            // Keep track of currently pressed keys to send to the rendering thread
-            Event::WindowEvent { event: WindowEvent::KeyboardInput {
-                input: KeyboardInput { state: key_state, virtual_keycode: Some(keycode), .. }, .. }, .. } => {
-
-                if let Ok(mut keys) = arc_pressed_keys.lock() {
-                    match key_state {
-                        Released => {
-                            if keys.contains(&keycode) {
-                                let i = keys.iter().position(|&k| k == keycode).unwrap();
-                                keys.remove(i);
-                            }
-                        },
-                        Pressed => {
-                            if !keys.contains(&keycode) {
-                                keys.push(keycode);
+        if window_focus {
+            match event {
+                Event::WindowEvent { event: WindowEvent::Focused(f), .. } => {
+                    window_focus = f;
+                }
+                Event::WindowEvent { event: WindowEvent::CloseRequested, .. } => {
+                    *control_flow = ControlFlow::Exit;
+                },
+                // Keep track of currently pressed keys to send to the rendering thread
+                Event::WindowEvent { event: WindowEvent::KeyboardInput {
+                    input: KeyboardInput { state: key_state, virtual_keycode: Some(keycode), .. }, .. }, .. } => {
+    
+                    if let Ok(mut keys) = arc_pressed_keys.lock() {
+                        match key_state {
+                            Released => {
+                                if keys.contains(&keycode) {
+                                    let i = keys.iter().position(|&k| k == keycode).unwrap();
+                                    keys.remove(i);
+                                }
+                            },
+                            Pressed => {
+                                if !keys.contains(&keycode) {
+                                    keys.push(keycode);
+                                }
                             }
                         }
                     }
-                }
-
-                // Handle escape separately
-                match keycode {
-                    Escape => {
-                        *control_flow = ControlFlow::Exit;
-                    },
-                    _ => { }
-                }
-            },
-            Event::DeviceEvent { event: DeviceEvent::MouseMotion { delta }, .. } => {
-                // Accumulate mouse movement
-                if let Ok(mut position) = arc_mouse_delta.lock() {
-                    *position = (position.0 + delta.0 as f32, position.1 + delta.1 as f32);
-                }
-            },
-            _ => { }
+    
+                    // Handle escape separately
+                    match keycode {
+                        Escape => {
+                            *control_flow = ControlFlow::Exit;
+                        },
+                        _ => { }
+                    }
+                },
+                Event::DeviceEvent { event: DeviceEvent::MouseMotion { delta }, .. } => {
+                    // Accumulate mouse movement
+                    if let Ok(mut position) = arc_mouse_delta.lock() {
+                        *position = (position.0 + delta.0 as f32, position.1 + delta.1 as f32);
+                    }
+                },
+                _ => { }
+            }
+        } else { // window not in focus
+            match event {
+                Event::WindowEvent { event: WindowEvent::Focused(f), .. } => {
+                    window_focus = f;
+                },
+                _ => { }
+            }
         }
     });
     // texture delete ...
