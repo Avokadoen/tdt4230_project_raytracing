@@ -6,7 +6,7 @@ use glutin::{dpi::PhysicalSize, event::{DeviceEvent, ElementState::{Pressed, Rel
 
 use cgmath::{InnerSpace, Vector3};
 use rand::Rng;
-use std::{env, path::Path, sync::{Arc, Mutex, RwLock}, thread};
+use std::{env, ffi::c_void, path::Path, sync::{Arc, Mutex, RwLock}, thread};
 
 use resources::Resources;
 use renderer::{Material, camera::{CameraBuilder}, compute_shader::ComputeShader, octree::{Octree}, program::Program, shader::Shader, vao::{
@@ -19,11 +19,17 @@ use utility::{Direction, chronos::Chronos};
 // TODO: currently lots of opengl stuff. Move all of it into renderer module
 
 fn main() {
+    // TODO: viewport and window is still kinda broken on X11
+    //       A visible black bar to the right and top of the screen. 
+    //       migth be a issue between camera logical aspect ratio and viewport physical one
+    // force a scaling of 1 on X11
+    std::env::set_var("WINIT_X11_SCALE_FACTOR", "1"); 
+    
     let res = Resources::from_relative_path(Path::new("assets")).unwrap();
     
     let el = glutin::event_loop::EventLoop::new();
     
-    let physical_size = PhysicalSize::new(1000, 800);
+    let physical_size = PhysicalSize::new(1000, 1000);
 
     let mut wb  = glutin::window::WindowBuilder::new()
         .with_title("TDT4230 Raytracer")
@@ -31,7 +37,6 @@ fn main() {
         .with_inner_size(physical_size)
         .with_always_on_top(true);
         
-
     let mut chronos: Chronos = Default::default();
 
     let args: Vec<String> = env::args().collect();
@@ -42,7 +47,7 @@ fn main() {
             }
             "-f" | "-F" => {
                 wb = wb.with_maximized(true)
-                .with_fullscreen(Some(Fullscreen::Borderless(el.primary_monitor())));
+                    .with_fullscreen(Some(Fullscreen::Borderless(el.primary_monitor())));
             },
             "-h" => {
                 // TODO: c should default to opt-in
@@ -58,10 +63,23 @@ fn main() {
 
     let cb = glutin::ContextBuilder::new().with_vsync(true);
     
-    let windowed_context = cb.build_windowed(wb, &el).unwrap();
-    if let Err(e) = windowed_context.window().set_cursor_grab(true) {
-        panic!("Error grabbing mouse, e: {}", e);
+    let windowed_context = cb.with_vsync(true).build_windowed(wb, &el).unwrap();
+
+    {
+        // This seems to fail at random on X11, so try a couple of times before panic
+        const MAX_GRAB_ATTEMPTS: u32 = 20;
+        'grab: for x in 0..MAX_GRAB_ATTEMPTS {
+            match windowed_context.window().set_cursor_grab(true) {
+                Ok(()) => break 'grab,
+                Err(e) => {
+                    if x == MAX_GRAB_ATTEMPTS - 1 { 
+                        eprintln!("Error grabbing mouse, e: {}", e);
+                    }
+                }
+            }
+        }
     }
+
     windowed_context.window().set_cursor_visible(false);
 
     // Set up a shared vector for keeping track of currently pressed keys
@@ -73,23 +91,23 @@ fn main() {
     let arc_mouse_delta = Arc::new(Mutex::new((0f32, 0f32)));
     // Make a reference of this tuple to send to the render thread
     let mouse_delta = Arc::clone(&arc_mouse_delta);
-    
+
     // Spawn a separate thread for rendering, so event handling doesn't block rendering
     let render_thread = thread::spawn(move || {
+        // windowed_context.window().
         let sf = windowed_context.window().scale_factor();
-        let screen_dimensions = windowed_context.window().inner_size().to_logical::<u32>(sf);
-
+        let logical_dimensions = windowed_context.window().inner_size().to_logical::<i32>(sf);
 
         // Acquire the OpenGL Context and load the function pointers. This has to be done inside of the renderin thread, because
         // an active OpenGL context cannot safely traverse a thread boundary
         let context = unsafe {
             let c = windowed_context.make_current().unwrap();
-            gl::load_with(|symbol| c.get_proc_address(symbol) as *const _);
+            gl::load_with(|symbol| c.get_proc_address(symbol) as *const c_void);
             c
         };
 
         unsafe {
-            gl::Viewport(0, 0, screen_dimensions.width as i32, screen_dimensions.height as i32); // set viewport
+            gl::Viewport(0, 0, physical_size.width, physical_size.height); // set viewport
             gl::ClearColor(0.0, 0.0, 0.0, 1.0);
         }
 
@@ -131,17 +149,18 @@ fn main() {
             VertexArrayObject::new(vec![pos, uv], vertices.id())
         };
 
-        let octree = Octree::new(0).unwrap();
-        octree.bind();
-        {
-            let proc_terrain_program = {
-                let shader = Shader::from_resources(&res, "shaders/terrain_generator.comp").unwrap();
-                let program = Program::from_shaders(&[shader]).unwrap();
-                ComputeShader::new(program).unwrap() // TODO: handle this
-            }; 
-            // generate initial octree
-            proc_terrain_program.dispatch_compute(2, 2, 2);
-        }
+        // TODO: rewrite octree to use buffer
+        // let octree = Octree::new(0).unwrap();
+        // octree.bind();
+        // {
+        //     let proc_terrain_program = {
+        //         let shader = Shader::from_resources(&res, "shaders/terrain_generator.comp").unwrap();
+        //         let program = Program::from_shaders(&[shader]).unwrap();
+        //         ComputeShader::new(program).unwrap() // TODO: handle this
+        //     }; 
+        //     // generate initial octree
+        //     proc_terrain_program.dispatch_compute(2, 2, 2);
+        // }
 
         let mut raytrace_program = {
             let shader = Shader::from_resources(&res, "shaders/raytracer.comp").unwrap();
@@ -150,12 +169,13 @@ fn main() {
         }; 
 
 
-        let mut camera = CameraBuilder::new(90.0, screen_dimensions.width as i32)
-            .with_aspect_ratio(screen_dimensions.width as f32 / screen_dimensions.height as f32 )
+        let mut camera = CameraBuilder::new(90.0, logical_dimensions.width as i32)
+            .with_aspect_ratio(logical_dimensions.width as f32 / logical_dimensions.height as f32 )
             .with_origin(Vector3::<f32>::new(0.0, 0.0, 0.0))
             .with_viewport_height(2.0)
-            .with_sample_per_pixel(10)
-            .with_max_bounce(10)
+            .with_sample_per_pixel(4)
+            .with_max_bounce(8)
+            .with_turn_rate(0.05)
             .build(&mut raytrace_program.program)
             .unwrap();
 
@@ -178,7 +198,7 @@ fn main() {
                        -4.0,  0.0,   -1.0, -0.4,    2.0,      0.0, 0.0, 0.0, // hollow glass inner
                         0.0,  0.0,    2.0,  0.5,    2.0,      0.0, 0.0, 0.0, // glass 
                 ];
-
+ 
                 let mut all_spheres = Vec::<f32>::with_capacity(default_spheres.len() + 11 * 11);
                 all_spheres.append(&mut default_spheres);
                 let mut rng = rand::thread_rng();
@@ -318,6 +338,7 @@ fn main() {
         let render_size = (camera.render_texture.width(), camera.render_texture.height(), camera.render_texture.depth());
         loop {
             chronos.tick();
+
             // Handle keyboard input
             if let Ok(keys) = pressed_keys.lock() {
                 let mut l_shift_used = false;
@@ -394,6 +415,7 @@ fn main() {
     });
 
     // Start the event loop -- This is where window events get handled
+    let mut window_focus = true;
     el.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
 
@@ -403,48 +425,60 @@ fn main() {
                 *control_flow = ControlFlow::Exit;
             }
         }
+        
 
-        match event {
-            Event::WindowEvent { event: WindowEvent::CloseRequested, .. } => {
-                *control_flow = ControlFlow::Exit;
-            },
-            // Keep track of currently pressed keys to send to the rendering thread
-            Event::WindowEvent { event: WindowEvent::KeyboardInput {
-                input: KeyboardInput { state: key_state, virtual_keycode: Some(keycode), .. }, .. }, .. } => {
-
-                if let Ok(mut keys) = arc_pressed_keys.lock() {
-                    match key_state {
-                        Released => {
-                            if keys.contains(&keycode) {
-                                let i = keys.iter().position(|&k| k == keycode).unwrap();
-                                keys.remove(i);
-                            }
-                        },
-                        Pressed => {
-                            if !keys.contains(&keycode) {
-                                keys.push(keycode);
+        if window_focus {
+            match event {
+                Event::WindowEvent { event: WindowEvent::Focused(f), .. } => {
+                    window_focus = f;
+                }
+                Event::WindowEvent { event: WindowEvent::CloseRequested, .. } => {
+                    *control_flow = ControlFlow::Exit;
+                },
+                // Keep track of currently pressed keys to send to the rendering thread
+                Event::WindowEvent { event: WindowEvent::KeyboardInput {
+                    input: KeyboardInput { state: key_state, virtual_keycode: Some(keycode), .. }, .. }, .. } => {
+    
+                    if let Ok(mut keys) = arc_pressed_keys.lock() {
+                        match key_state {
+                            Released => {
+                                if keys.contains(&keycode) {
+                                    let i = keys.iter().position(|&k| k == keycode).unwrap();
+                                    keys.remove(i);
+                                }
+                            },
+                            Pressed => {
+                                if !keys.contains(&keycode) {
+                                    keys.push(keycode);
+                                }
                             }
                         }
                     }
-                }
-
-                // Handle escape separately
-                match keycode {
-                    Escape => {
-                        *control_flow = ControlFlow::Exit;
-                    },
-                    _ => { }
-                }
-            },
-            Event::DeviceEvent { event: DeviceEvent::MouseMotion { delta }, .. } => {
-                // Accumulate mouse movement
-                if let Ok(mut position) = arc_mouse_delta.lock() {
-                    *position = (position.0 + delta.0 as f32, position.1 + delta.1 as f32);
-                }
-            },
-            _ => { }
+    
+                    // Handle escape separately
+                    match keycode {
+                        Escape => {
+                            *control_flow = ControlFlow::Exit;
+                        },
+                        _ => { }
+                    }
+                },
+                Event::DeviceEvent { event: DeviceEvent::MouseMotion { delta }, .. } => {
+                    // Accumulate mouse movement
+                    if let Ok(mut position) = arc_mouse_delta.lock() {
+                        *position = (position.0 + delta.0 as f32, position.1 + delta.1 as f32);
+                    }
+                },
+                _ => { }
+            }
+        } else { // window not in focus
+            match event {
+                Event::WindowEvent { event: WindowEvent::Focused(f), .. } => {
+                    window_focus = f;
+                },
+                _ => { }
+            }
         }
     });
-
     // texture delete ...
 }
