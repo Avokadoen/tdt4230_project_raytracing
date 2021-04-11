@@ -37,7 +37,7 @@ impl Chronos {
     pub fn tick(&mut self) {
         self.last = self.now;
         self.now = Instant::now();
-        self.delta_time = (self.last.elapsed().as_millis() - self.now.elapsed().as_millis()) as f64 / 1000.0;
+        self.delta_time = (self.last.elapsed().as_micros() - self.now.elapsed().as_micros()) as f64 / 1_000_000.0;
         self.second_tick += self.delta_time;
         self.frames_this_second += 1;
         if self.second_tick < 1.0 {
@@ -46,7 +46,6 @@ impl Chronos {
 
         if self.display_fps {
             let mut lock = self.out.lock();
-            self.second_tick = 0.0;
             let msg = format!("\rfps: {}             ", self.frames_this_second);
             match lock.write_all(msg.as_bytes()) {
                 _ => () // ignore errors TODO: maybe don't ignore?
@@ -55,6 +54,8 @@ impl Chronos {
                 _ => ()
             }
         }
+        
+        self.second_tick = 0.0;
         self.frames_this_second = 0;
     }
 }
