@@ -5,10 +5,14 @@ opengl compute shaders using [Raytracing in one weekend](https://raytracing.gith
 
 ![demo](https://github.com/Avokadoen/tdt4230_project_raytracing/blob/master/camera_wip.gif)
 
+# Report with explanation of code
+
+TODO
+
 # Sources
 
 Raytracing concepts: https://raytracing.github.io/books/RayTracingInOneWeekend.html
-Cube intersection test and cube normal computation: http://jcgt.org/published/0007/03/04/
+Cube intersection test: http://jcgt.org/published/0007/03/04/
 
 Storing an octree in a texture: https://developer.nvidia.com/gpugems/gpugems2/part-v-image-oriented-computing/chapter-37-octree-textures-gpu?fbclid=IwAR1iQ3i-t28gnm_XwP-MViIY11C4V9jjKniQonVQAbXym3BXcZ2muIofjWQ 
 

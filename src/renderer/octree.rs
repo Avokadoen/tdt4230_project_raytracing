@@ -1,43 +1,63 @@
 
-use super::{InitializeErr, texture::Texture};
+use cgmath::Vector3;
+
+use super::{InitializeErr, program::Program, texture::Texture, vao::VertexArrayObject};
+
+pub const EMPTY: i32 = 0;
+pub const PARENT: i32 = 1;
+pub const LEAF: i32 = 2;
 
 pub struct Octree {
-    structure: Texture,
+    min_point: Vector3<f32>,
+    scale: f32,
+    current_max_depth: i32,
+    cell_count: i32,
+    pub vao: VertexArrayObject
 }
 
 impl Octree {
-    const MAX_DEPTH: u32 = 5;
-
-    pub fn new(max_depth: u32) -> Result<Octree, InitializeErr> {
-        if max_depth > 5 {
-            let msg = String::from(format!("Max depth cant exceed {}", Octree::MAX_DEPTH));
-            return Err(InitializeErr::InvalidArgument(msg));
-        }
-
-        // max slots is always 2 * 2^n in a N^3-Tree 
-        let dimention = 2 * 2i32.pow(max_depth);
-        let structure = Texture::new_3d(
-            gl::TEXTURE1,
-            1,
-            gl::RGBA32F,
-            gl::RGBA,
-            dimention,
-            dimention,
-            dimention
-        )?;
-
+    // TODO: cell_count can be computed by buffer len
+    pub fn new(min_point: Vector3<f32>, scale: f32, current_max_depth: i32, cell_count: i32, vao: VertexArrayObject) -> Result<Octree, InitializeErr> {
         Ok(Octree {
-            structure
+            min_point,
+            scale, 
+            current_max_depth,
+            cell_count,
+            vao
         })
     }
 
-    pub fn bind(&self) {
-        self.structure.bind();
-    }
+    pub fn update_pos_scale(&self, rt_program: &mut Program) -> Result<(), InitializeErr> {
+        if let Err(e) = rt_program.set_vector3_f32("octree.min_point", self.min_point) {
+            return Err(e);
+        }
 
-    #[allow(dead_code)]
-    pub fn unbind(&self) {
-        self.structure.unbind();
+        if let Err(e) = rt_program.set_vector3_i32("octree.indirect_pool_size", Vector3::new(self.cell_count * 2, 2, 2)) {
+            return Err(e);
+        }
+        
+        if let Err(e) = rt_program.set_f32("octree.scale", self.scale) {
+            return Err(e);
+        }
+
+        if let Err(e) = rt_program.set_f32("octree.inv_scale", 1.0 / self.scale) {
+            return Err(e);
+        }
+
+        if let Err(e) = rt_program.set_i32("octree.current_max_depth", self.current_max_depth) {
+            return Err(e);
+        }
+
+        if let Err(e) = rt_program.set_i32("octree.cell_count", self.cell_count) {
+            return Err(e);
+        }
+
+        // TODO: configurable
+        if let Err(e) = rt_program.set_i32("octree.max_traversal_iter", 30) {
+            return Err(e);
+        }
+
+        Ok(())
     }
 
     // pub fn generate_terrain()

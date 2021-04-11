@@ -44,6 +44,30 @@ impl Program {
         }
     }
 
+    pub fn set_vector3_i32(&mut self, name: &str, value: cgmath::Vector3<i32>) -> Result<(), InitializeErr> {
+        match self.register_uniform(name) {
+            Ok(()) => {
+                unsafe {
+                    gl::ProgramUniform3i(self.id, self.uniforms[name], value.x, value.y, value.z);
+                }
+                return Ok(());
+            }
+            Err(e) => Err(e.var_into_typed("ivec3"))
+        }
+    }
+
+    pub fn set_f32(&mut self, name: &str, value: f32) -> Result<(), InitializeErr> {
+        match self.register_uniform(name) {
+            Ok(()) => {
+                unsafe {
+                    gl::ProgramUniform1f(self.id, self.uniforms[name], value);
+                }
+                return Ok(())
+            },
+            Err(e) => Err(e.var_into_typed("f32"))
+        }
+    }
+
     pub fn set_vector3_f32(&mut self, name: &str, value: cgmath::Vector3<f32>) -> Result<(), InitializeErr> {
         match self.register_uniform(name) {
             Ok(()) => {

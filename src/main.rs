@@ -146,29 +146,15 @@ fn main() {
                 gl::STATIC_DRAW
             );
             
-            VertexArrayObject::new(vec![pos, uv], vertices.id())
+            VertexArrayObject::new::<f32>(vec![pos, uv], vertices.id(), gl::FLOAT)
         };
-
-        // TODO: rewrite octree to use buffer (issue #22)
-        // let octree = Octree::new(0).unwrap();
-        // octree.bind();
-        // {
-        //     let proc_terrain_program = {
-        //         let shader = Shader::from_resources(&res, "shaders/terrain_generator.comp").unwrap();
-        //         let program = Program::from_shaders(&[shader]).unwrap();
-        //         ComputeShader::new(program).unwrap() // TODO: handle this
-        //     }; 
-        //     // generate initial octree
-        //     proc_terrain_program.dispatch_compute(2, 2, 2);
-        // }
-
+        
         let mut raytrace_program = {
             let shader = Shader::from_resources(&res, "shaders/raytracer.comp").unwrap();
             let program = Program::from_shaders(&[shader]).unwrap();
             ComputeShader::new(program).unwrap() // TODO: handle this
         }; 
-
-
+        
         let mut camera = CameraBuilder::new(90.0, logical_dimensions.width as i32)
             .with_aspect_ratio(logical_dimensions.width as f32 / logical_dimensions.height as f32 )
             .with_origin(Vector3::<f32>::new(0.0, 0.0, 0.0))
@@ -185,53 +171,51 @@ fn main() {
 
         // TODO: vao might not be needed for shader storage buffer? read spec 
         //       and update code accordingly
-        let hittable_vao = { 
+        let octree = { 
+
             let vao = {
-                let mut default_spheres = vec![
-                    // |Position          |Radius  |Mat index|Padding |
-                        0.0, -100.5, -1.0,  100.0,  1.0,      0.0, 0.0, 0.0, // big sphere
-                        0.0,  0.0,   -1.0,  0.5,    0.0,      0.0, 0.0, 0.0, // middle sphere
-                        4.0,  0.0,   -1.0,  0.5,    3.0,      0.0, 0.0, 0.0, // right sphere
-                       -4.0,  0.0,   -1.0,  0.5,    2.0,      0.0, 0.0, 0.0, // hollow glass outer 
-                       -4.0,  0.0,   -1.0, -0.4,    2.0,      0.0, 0.0, 0.0, // hollow glass inner
-                        0.0,  0.0,    2.0,  0.5,    2.0,      0.0, 0.0, 0.0, // glass 
-                ];
- 
-                let mut all_spheres = Vec::<f32>::with_capacity(default_spheres.len() + 11 * 11);
-                all_spheres.append(&mut default_spheres);
-                let mut rng = rand::thread_rng();
-                let extends = Vector3::<f32>::new(4.0, 0.2, 0.0);
-                for i in 0..11 {
-                    for j in 0..11 {
-                        let center = Vector3::<f32>::new(i as f32 + 0.9 * rng.gen::<f32>(), 0.2, j as f32 + 0.9 * rng.gen::<f32>());
-                        
-                        if (center - extends).magnitude() > 0.9{
-                            all_spheres.push(center.x);
-                            all_spheres.push(center.y);
-                            all_spheres.push(center.z);
-                            all_spheres.push(0.2);
-
-                            let mat: u32 = rng.gen_range(0..12);
-                            all_spheres.push(mat as f32);
-                            all_spheres.push(0.0);
-                            all_spheres.push(0.0);
-                            all_spheres.push(0.0);
-                        }
-                    }
-                }
-
-                let sphere_vbo = VertexBufferObject::new::<f32>(
-                    all_spheres,
+                use renderer::octree::{EMPTY, PARENT, LEAF};
+    
+                let cells_vbo = VertexBufferObject::new::<i32>(
+                    vec![
+                        // cell 0 (root)
+                        0, EMPTY,  1, PARENT, 
+                        1, EMPTY,  1, EMPTY,
+                        1, EMPTY,  1, EMPTY, 
+                        1, PARENT, 0, EMPTY,
+                        // cell 1
+                        0, EMPTY,  2, PARENT, 
+                        0, EMPTY,  0, EMPTY,
+                        0, EMPTY,  0, EMPTY, 
+                        2, PARENT, 0, EMPTY,
+                        // cell 2
+                        0, EMPTY,  3, PARENT, 
+                        0, EMPTY,  0, EMPTY,
+                        0, EMPTY,  2, EMPTY, 
+                        3, PARENT, 0, EMPTY,
+                        // cell 3
+                        0, EMPTY,  4, PARENT, 
+                        0, EMPTY,  0, EMPTY,
+                        0, EMPTY,  2, EMPTY, 
+                        4, PARENT, 0, EMPTY,
+                        // cell 4
+                        0, EMPTY, 2, LEAF, 
+                        0, EMPTY, 1, LEAF,
+                        0, EMPTY, 3, LEAF, 
+                        0, LEAF,  0, EMPTY
+                        // ------
+                    ],
                     gl::ARRAY_BUFFER,
-                    gl::STATIC_DRAW
+                    gl::DYNAMIC_DRAW
                 );
-                let sphere_attrib = VertexAttributePointer {
+    
+                let cells_attrib = VertexAttributePointer {
                     location: 0,
-                    size: 8,
+                    size: 2,
                     offset: 0
                 };
-                unsafe { gl::BindBufferBase(gl::SHADER_STORAGE_BUFFER, 0, sphere_vbo.id()); } 
-                VertexArrayObject::new(vec![sphere_attrib], sphere_vbo.id()) 
+                unsafe { gl::BindBufferBase(gl::SHADER_STORAGE_BUFFER, 0, cells_vbo.id()); } 
+                VertexArrayObject::new::<i32>(vec![cells_attrib], cells_vbo.id(), gl::INT)
             };
         
             {
@@ -264,7 +248,7 @@ fn main() {
                     size: 3,
                     offset: 0
                 };
-                vao.append_vbo(vec![mat_attrib], mat_vbo.id());
+                vao.append_vbo::<u32>(vec![mat_attrib], mat_vbo.id(), gl::UNSIGNED_INT);
             }
             
             {
@@ -288,7 +272,7 @@ fn main() {
                     offset: 0
                 };
                 unsafe { gl::BindBufferBase(gl::SHADER_STORAGE_BUFFER, 2, albedo_vbo.id()); } 
-                vao.append_vbo(vec![mat_attrib], albedo_vbo.id());
+                vao.append_vbo::<f32>(vec![mat_attrib], albedo_vbo.id(), gl::FLOAT);
             }
 
             {
@@ -309,7 +293,7 @@ fn main() {
                     offset: 0
                 };
                 unsafe { gl::BindBufferBase(gl::SHADER_STORAGE_BUFFER, 3, metal_vbo.id()); } 
-                vao.append_vbo(vec![metal_attrib], metal_vbo.id());
+                vao.append_vbo::<f32>(vec![metal_attrib], metal_vbo.id(), gl::FLOAT);
             }
 
             {
@@ -327,10 +311,13 @@ fn main() {
                     offset: 0
                 };
                 unsafe { gl::BindBufferBase(gl::SHADER_STORAGE_BUFFER, 4, dielectric_vbo.id()); } 
-                vao.append_vbo(vec![dielectric_attrib], dielectric_vbo.id());
+                vao.append_vbo::<f32>(vec![dielectric_attrib], dielectric_vbo.id(), gl::FLOAT);
             }
 
-            vao
+           
+            let o = Octree::new(Vector3::new(-2.0, -2.0, -3.0), 4.0, 5, 5, vao).unwrap();
+            o.update_pos_scale(&mut raytrace_program.program).unwrap();
+            o
         };
 
         let render_size = (camera.render_texture.width(), camera.render_texture.height(), camera.render_texture.depth());
@@ -374,7 +361,7 @@ fn main() {
                 *delta = (0.0, 0.0);
             }
             
-            hittable_vao.bind();
+            octree.vao.bind();
             raytrace_program.dispatch_compute(render_size.0, render_size.1, render_size.2);
             VertexArrayObject::unbind();
 
