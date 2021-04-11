@@ -149,7 +149,7 @@ fn main() {
             VertexArrayObject::new(vec![pos, uv], vertices.id())
         };
 
-        // TODO: rewrite octree to use buffer
+        // TODO: rewrite octree to use buffer (issue #22)
         // let octree = Octree::new(0).unwrap();
         // octree.bind();
         // {
@@ -182,8 +182,6 @@ fn main() {
         // We only use this texture, so we bind it before render loop and forget about it.
         // This is somewhat bad practice, but in our case, the consequenses are non existent
         camera.render_texture.bind();
-
-
 
         // TODO: vao might not be needed for shader storage buffer? read spec 
         //       and update code accordingly
@@ -318,7 +316,7 @@ fn main() {
                 let dielectric_vbo = VertexBufferObject::new::<f32>(
                     vec![
                     // |Ir |
-                        1.5,
+                        1.2,
                     ],
                     gl::ARRAY_BUFFER,
                     gl::STATIC_DRAW

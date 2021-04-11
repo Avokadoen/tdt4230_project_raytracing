@@ -98,8 +98,8 @@ const int PARENT = 1;
 const int LEAF = 2;
 
 // TODO: uniform and data buffer:
-const vec3 octree_min = vec3(-0.5, -0.5, -2); 
-const float octree_scale = 1.0; // world scale
+const vec3 octree_min = vec3(-2, -2, -2); 
+const float octree_scale = 4.0; // world scale
 
 // TODOs for data: 
 // convert float to int values
@@ -151,55 +151,38 @@ const float octree_scale = 1.0; // world scale
 // depth 5
 const int octree_max_depth = 5;
 const int octree_cell_count = 5;
-const Node indirect_cells[octree_cell_count * 2][2][2] = Node[octree_cell_count * 2][2][2](
+const Node indirect_cells[(octree_cell_count * 2) * 2 * 2] = Node[(octree_cell_count * 2) * 2 * 2](
     // cell 0 (root)
-    Node[2][2](                         
-        Node[2](Node(1, EMPTY), Node(1, PARENT)), 
-        Node[2](Node(1, EMPTY), Node(1, EMPTY))
-    ),
-    Node[2][2](                         
-        Node[2](Node(1, EMPTY), Node(1, EMPTY)), 
-        Node[2](Node(1, PARENT), Node(0, EMPTY))
-    ),
+    Node(1, EMPTY),  Node(1, PARENT), 
+    Node(1, EMPTY),  Node(1, EMPTY),
+    Node(1, EMPTY),  Node(1, EMPTY), 
+    Node(1, PARENT), Node(0, EMPTY),
     // cell 1
-    Node[2][2](                         
-        Node[2](Node(0, EMPTY), Node(2, PARENT)), 
-        Node[2](Node(0, EMPTY), Node(0, EMPTY))
-    ),
-    Node[2][2](                         
-        Node[2](Node(0, EMPTY), Node(0, EMPTY)), 
-        Node[2](Node(2, PARENT), Node(0, EMPTY))
-    ),
+    Node(0, EMPTY),  Node(2, PARENT), 
+    Node(0, EMPTY),  Node(0, EMPTY),
+    Node(0, EMPTY),  Node(0, EMPTY), 
+    Node(2, PARENT), Node(0, EMPTY),
     // cell 2
-    Node[2][2](                         
-        Node[2](Node(0, EMPTY), Node(3, PARENT)), 
-        Node[2](Node(0, EMPTY), Node(0, EMPTY))
-    ),
-    Node[2][2](                         
-        Node[2](Node(0, EMPTY), Node(2, EMPTY)), 
-        Node[2](Node(3, PARENT), Node(0, EMPTY))
-    ),
+    Node(0, EMPTY),  Node(3, PARENT), 
+    Node(0, EMPTY),  Node(0, EMPTY),
+    Node(0, EMPTY),  Node(2, EMPTY), 
+    Node(3, PARENT), Node(0, EMPTY),
     // cell 3
-    Node[2][2](                         
-        Node[2](Node(0, EMPTY), Node(4, PARENT)), 
-        Node[2](Node(0, EMPTY), Node(0, EMPTY))
-    ),
-    Node[2][2](                         
-        Node[2](Node(0, EMPTY), Node(2, EMPTY)), 
-        Node[2](Node(4, PARENT), Node(0, EMPTY))
-    ),
+    Node(0, EMPTY),  Node(4, PARENT), 
+    Node(0, EMPTY),  Node(0, EMPTY),
+    Node(0, EMPTY),  Node(2, EMPTY), 
+    Node(4, PARENT), Node(0, EMPTY),
      // cell 4
-    Node[2][2](                         
-        Node[2](Node(0, EMPTY), Node(2, LEAF)), 
-        Node[2](Node(0, EMPTY), Node(3, LEAF))
-    ),
-    Node[2][2](                         
-        Node[2](Node(0, EMPTY), Node(2, EMPTY)), 
-        Node[2](Node(1, LEAF), Node(0, EMPTY))
-    )
+    Node(0, EMPTY), Node(2, LEAF), 
+    Node(0, EMPTY), Node(1, LEAF),
+    Node(0, EMPTY), Node(3, LEAF), 
+    Node(0, LEAF),  Node(0, EMPTY)
     // ------
 );
 const ivec3 indirect_pool_size = ivec3(octree_cell_count * 2, 2, 2);
+Node AccessIndirectCell(ivec3 i) {
+    return indirect_cells[i.z + indirect_pool_size.y * (i.y + indirect_pool_size.z * i.x)];
+}
 
 
 // Octree methods
@@ -374,43 +357,19 @@ bool CubeHit(vec3 cmin, float size, Ray r, float t_min, inout float t_max, out H
     
     float radius = size * 0.5;
     vec3 center = cmin + vec3(radius);
-    hit.front_face = axisMax(abs(r.origin - center) / radius) < 1 ? false : true;
     
     vec3 normal = (hit.point - center);
     vec3 abs_norm = abs(normal);
     float keep_x = float(abs_norm.x >= abs_norm.y && abs_norm.x >= abs_norm.z);
     float keep_y = float(abs_norm.y > abs_norm.x && abs_norm.y > abs_norm.z);
     float keep_z = float(abs_norm.z > abs_norm.x && abs_norm.z > abs_norm.y); 
-    normal = vec3(normal.x * keep_x, normal.y * keep_y, normal.z * keep_z);
-    hit.normal = normalize(normal * fma(-2, float(!hit.front_face), 1));
+    normal = normalize(vec3(normal.x * keep_x, normal.y * keep_y, normal.z * keep_z));
+    hit.front_face = dot(r.direction, normal) < 0; 
+    hit.normal = normalize(normal * fma(-2, int(!hit.front_face), 1));
 
     return true;
 }
 
-// float4 tree_lookup(
-//     uniform sampler3D IndirPool, // Indirection Pool    
-//     uniform float3 invS, // 1 / S    
-//     uniform float N,    
-//     float3 M) // Lookup coordinates    
-// {    
-//     float4 I = float4(0.0, 0.0, 0.0, 0.0);    
-//     float3 MND = M;      
-//     for (float i=0; i<HRDWTREE_MAX_DEPTH; i++) { 
-//         // fixed # of iterations        
-//         float3 P;      
-//         // compute lookup coords. within current node      
-//         P = (MND + floor(0.5 + I.xyz * 255.0)) * invS;      
-//         // access indirection pool      
-//         if (I.w < 0.9) // already in a leaf?          
-//             I = (float4)tex3D(IndirPool, P); // no, continue to next depth     
-//         if (I.w > 0.9)    // a leaf has been reached          
-//             break;  
-//         if (I.w < 0.1) // empty cell        
-//             discard;      // compute pos within next depth grid   (meaing it should return a signal that this is empty and ray should continue t)    
-//         MND = MND * N;    
-//     }    
-//     return (I);  
-// }
 // Does a lookup in the texture octree and returns current cell (pixel)
 // Should only be use in OctreeHit
 bool treeLookup(
@@ -434,14 +393,12 @@ bool treeLookup(
         vec3 added_uv = (mod(point, 2) / pow_depth);
         grid_uv += added_uv;
 
-        node = indirect_cells[point.x][point.y][point.z];
+        node = AccessIndirectCell(point);
         
         // if cell is not a parent
         bool is_empty = node.type == EMPTY;
         bool is_leaf = node.type == LEAF;
         if (is_empty || is_leaf) { 
-            // don't add last addition if we have iterated
-            // grid_uv = fma(-added_uv, vec3(i > 0), grid_uv); 
             // hit voxel, return true if is leaf
             return is_leaf;
         } 
@@ -590,18 +547,16 @@ bool ScatterDielectric(int index, Ray r_in, HitRecord hit, out vec3 attenuation,
         refraction_ratio = (1.0/ir); 
     } 
 
-    vec3 unit_direction = normalize(r_in.direction);
-
-    float cos_theta = min(dot(-unit_direction, hit.normal), 1.0);
+    float cos_theta = min(dot(-r_in.direction, hit.normal), 1.0);
     float sin_theta = sqrt(1.0 - cos_theta * cos_theta);
 
     vec3 direction;
     bool cannot_refract = refraction_ratio * sin_theta > 1.0;
     bool should_reflect =  reflectance(cos_theta, refraction_ratio) > Rand(hit.point.xy);
     if (cannot_refract || should_reflect) {
-        direction = reflect(unit_direction, hit.normal);
+        direction = reflect(r_in.direction, hit.normal);
     } else {
-        direction = refract(unit_direction, hit.normal, refraction_ratio);
+        direction = refract(r_in.direction, hit.normal, refraction_ratio);
     }
 
     scattered = CreateRay(hit.point, direction);
