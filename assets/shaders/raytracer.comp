@@ -116,7 +116,7 @@ layout (std430, binding = 0) buffer OctreeBuffer {
 // Octree methods
 Node AccessIndirectCell(ivec3 i) { return indirect_cells[i.z + 2 * (i.y + 2 * i.x)]; }
 bool OctreeHit(Ray r, float t_min, float t_max, out HitRecord hit);
-bool CubeHit(vec3 cmin, float size, Ray r, float t_min, inout float t_max, out HitRecord hit);
+bool CubeHit(vec3 cmin, float size, Ray r, float t_min, inout float t_max, out HitRecord hit, out float dot_p);
 
 
 struct Material {
@@ -222,7 +222,7 @@ vec3 RayColor(Ray r) {
     if (loop_count > 0) return accumulative_attenuation;
 
     float t = 0.5 * (current_ray.direction.y + 1.0);
-    vec3 background_color = fma(vec3(1.0 - t), vec3(1.0, 1.0, 1.0), t * vec3(0.5, 0.7, 1.0));
+    vec3 background_color = fma(vec3(1.0 - t), vec3(1.0), t * vec3(0.5, 0.7, 1.0));
     return background_color;
 }
 
@@ -237,7 +237,7 @@ vec3 AlbedoColor(int index) {
 }
 
 // TODO: Source: (Ray tracing gems 2) / Peter Shirley
-bool CubeHit(vec3 cmin, float size, Ray r, float t_min, inout float t_max, out HitRecord hit) {
+bool CubeHit(vec3 cmin, float size, Ray r, float t_min, inout float t_max, out HitRecord hit, out float dot_p) {
     vec3 cmax = cmin + vec3(size);
 
     vec3 inv_ray_dir = 1 / r.direction;
@@ -271,7 +271,8 @@ bool CubeHit(vec3 cmin, float size, Ray r, float t_min, inout float t_max, out H
     float keep_y = float(abs_norm.y > abs_norm.x && abs_norm.y > abs_norm.z);
     float keep_z = float(abs_norm.z > abs_norm.x && abs_norm.z > abs_norm.y); 
     normal = normalize(vec3(normal.x * keep_x, normal.y * keep_y, normal.z * keep_z));
-    hit.front_face = dot(r.direction, normal) < 0; 
+    dot_p = dot(r.direction, normal);
+    hit.front_face = dot_p < 0; 
     hit.normal = normalize(normal * fma(-2, int(!hit.front_face), 1));
 
     return true;
@@ -317,21 +318,22 @@ bool treeLookup(
 
 // Traverse octree and check for hits in leaf nodes
 bool OctreeHit(Ray r, float t_min, float t_max, out HitRecord hit) {
-    // retrieve octree bound at hit point
-    // TODO: file const
-    const float min_t_advance = 0.00001;
+    const float base_t_advance = 0.01;
     vec3 c_min = octree.min_point;
     float c_scale = octree.scale;
     HitRecord c_hit;
+    float dot_p;
+    float pow_depth = 2; 
 
     // record t size of octree relative to ray
     float t_octree_max = t_max;
-    bool cube_hit = CubeHit(c_min, c_scale, r, t_min, t_octree_max, c_hit);
+    bool cube_hit = CubeHit(c_min, c_scale, r, t_min, t_octree_max, c_hit, dot_p);
     float t_stride = c_hit.t;
     
     for (int i = 0; i < octree.max_traversal_iter && cube_hit; i++) { 
         t_stride = t_stride;
 
+        float min_t_advance = base_t_advance / mix(pow_depth * 0.5, pow_depth, 1 - abs(dot_p));
         vec3 world_point = RayAt(r, t_stride + min_t_advance);
         vec3 lookup_point = (world_point - octree.min_point) * octree.inv_scale;
         // TODO: This hack checks explicitly if lookup is not in octree, this should
@@ -340,7 +342,6 @@ bool OctreeHit(Ray r, float t_min, float t_max, out HitRecord hit) {
             return false;
         }
 
-        float pow_depth; 
         vec3 grid_uv;
         Node node;
         if (treeLookup(lookup_point, pow_depth, grid_uv, node)) {
@@ -350,9 +351,9 @@ bool OctreeHit(Ray r, float t_min, float t_max, out HitRecord hit) {
                 c_min = fma(grid_uv, vec3(octree.scale), octree.min_point);
                 c_scale = octree.scale / pow_depth;  
                 
-                t_min = t_stride - min_t_advance;
+                t_min = t_stride;
                 t_stride = t_octree_max;
-                cube_hit = CubeHit(c_min, c_scale, r, t_min, t_stride, c_hit);
+                cube_hit = CubeHit(c_min, c_scale, r, t_min, t_stride, c_hit, dot_p);
             }
 
             hit = c_hit;
@@ -363,9 +364,9 @@ bool OctreeHit(Ray r, float t_min, float t_max, out HitRecord hit) {
         c_min = fma(grid_uv, vec3(octree.scale), octree.min_point);
         c_scale = octree.scale / pow_depth;  
         
-        t_min = t_stride - min_t_advance;
+        t_min = t_stride;
         t_stride = t_octree_max;
-        cube_hit = CubeHit(c_min, c_scale, r, t_min, t_stride, c_hit);
+        cube_hit = CubeHit(c_min, c_scale, r, t_min, t_stride, c_hit, dot_p);
     }
     
     return false;
