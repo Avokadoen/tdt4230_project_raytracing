@@ -1,7 +1,7 @@
 
 use cgmath::Vector3;
 
-use super::{InitializeErr, program::Program, texture::Texture, vao::VertexArrayObject};
+use super::{InitializeErr, program::Program, vao::VertexArrayObject};
 
 pub const EMPTY: i32 = 0;
 pub const PARENT: i32 = 1;

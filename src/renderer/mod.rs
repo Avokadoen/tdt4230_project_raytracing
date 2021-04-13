@@ -27,7 +27,6 @@ pub enum Material {
 #[derive(Debug)]
 pub enum InitializeErr {
     GL(GLenum),
-    InvalidArgument(String),
     VariableNotFound(String),
     TypedVariableNotFound(String, String),
     InvalidCStr(NulError),
@@ -53,7 +52,6 @@ impl fmt::Display for InitializeErr {
                     _ => write!(f, "got gl error code: {}", code)
                 }
             }
-            InitializeErr::InvalidArgument(s) => write!(f, "{}", s),
             InitializeErr::VariableNotFound(name) => write!(f, "failed to locate uniform {}", name),
             InitializeErr::TypedVariableNotFound(name, utype) => write!(f, "failed to locate uniform {} with type {}", name, utype),
             InitializeErr::InvalidCStr(e) => write!(f, "{}", e),

@@ -71,37 +71,6 @@ impl Texture {
             target,
         })
     }
-
-    pub fn new_3d(active: GLenum, bind_slot: GLuint, internal_format: GLenum, format: GLenum, width: GLsizei, height: GLsizei, depth: GLsizei) -> Result<Self, InitializeErr> {       
-        let target = gl::TEXTURE_3D;
-        let id = prep_texture(active, target)?;
-        unsafe { 
-            gl::TexImage3D(
-                target, 
-                0, 
-                internal_format as i32, 
-                width,
-                height,
-                depth,
-                0, 
-                format, 
-                gl::UNSIGNED_BYTE, 
-                std::ptr::null() 
-            );
-            check_for_gl_error()?;
-            gl::BindImageTexture(bind_slot, id, 0, gl::FALSE, 0, gl::READ_WRITE, internal_format);
-            check_for_gl_error()?;
-        }
-
-        Ok(Texture {
-            id,
-            active,
-            width,
-            height,
-            depth,
-            target,
-        })
-    }
 }
 
 fn prep_texture(active: GLenum, target: GLenum) -> Result<GLuint, InitializeErr> {
