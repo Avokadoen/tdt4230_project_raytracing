@@ -1,6 +1,7 @@
 use cgmath::Vector3;
 
 pub mod chronos;
+pub mod ply_point_loader;
 
 pub enum Direction {
     Front,

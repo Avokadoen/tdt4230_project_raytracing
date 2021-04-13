@@ -4,8 +4,7 @@ mod resources;
 
 use glutin::{dpi::PhysicalSize, event::{DeviceEvent, ElementState::{Pressed, Released}, Event, KeyboardInput, VirtualKeyCode::{self, *}, WindowEvent}, event_loop::ControlFlow, window::Fullscreen};
 
-use cgmath::{InnerSpace, Vector3};
-use rand::Rng;
+use cgmath::{Vector3};
 use std::{env, ffi::c_void, path::Path, sync::{Arc, Mutex, RwLock}, thread};
 
 use resources::Resources;
@@ -14,17 +13,11 @@ use renderer::{Material, camera::{CameraBuilder}, compute_shader::ComputeShader,
         VertexAttributePointer
     }, vbo::VertexBufferObject};
 
-use utility::{Direction, chronos::Chronos};
+use utility::{Direction, chronos::Chronos, ply_point_loader};
 
 // TODO: currently lots of opengl stuff. Move all of it into renderer module
 
 fn main() {
-    // TODO: viewport and window is still kinda broken on X11
-    //       A visible black bar to the right and top of the screen. 
-    //       migth be a issue between camera logical aspect ratio and viewport physical one
-    // force a scaling of 1 on X11
-    std::env::set_var("WINIT_X11_SCALE_FACTOR", "1"); 
-    
     let res = Resources::from_relative_path(Path::new("assets")).unwrap();
     
     let el = glutin::event_loop::EventLoop::new();
@@ -159,7 +152,7 @@ fn main() {
             .with_aspect_ratio(logical_dimensions.width as f32 / logical_dimensions.height as f32 )
             .with_origin(Vector3::<f32>::new(0.0, 0.0, 0.0))
             .with_viewport_height(2.0)
-            .with_sample_per_pixel(4)
+            .with_sample_per_pixel(8)
             .with_max_bounce(8)
             .with_turn_rate(0.05)
             .build(&mut raytrace_program.program)
@@ -169,10 +162,16 @@ fn main() {
         // This is somewhat bad practice, but in our case, the consequenses are non existent
         camera.render_texture.bind();
 
+        let content = match ply_point_loader::from_resources(&res, "models/3x3x3_point.ply") {
+            Err(e) => {
+                panic!("{}", e);
+            },
+            Ok(file) => file,
+        };
+
         // TODO: vao might not be needed for shader storage buffer? read spec 
         //       and update code accordingly
         let octree = { 
-
             let vao = {
                 use renderer::octree::{EMPTY, PARENT, LEAF};
     
