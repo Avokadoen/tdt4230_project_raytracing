@@ -39,7 +39,7 @@ impl Resources {
         })
     }
 
-    pub fn load_cstring(&self, resource_name: &str) -> Result<ffi::CString, Error> {
+    pub fn load_buffer(&self, resource_name: &str) -> Result<Vec<u8>, Error> {
         let mut file = fs::File::open(
             resource_name_to_path(&self.root_path, resource_name)
         )?;
@@ -49,6 +49,12 @@ impl Resources {
             file.metadata()?.len() as usize + 1
         );
         file.read_to_end(&mut buffer)?;
+
+        Ok(buffer)
+    }
+
+    pub fn load_cstring(&self, resource_name: &str) -> Result<ffi::CString, Error> {
+        let buffer = self.load_buffer(resource_name)?;
 
         // check for nul byte
         if buffer.iter().find(|i| **i == 0).is_some() {
