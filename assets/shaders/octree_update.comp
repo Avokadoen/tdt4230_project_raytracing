@@ -1,0 +1,96 @@
+#version 450
+
+layout(local_size_x = 32 * 32) in;
+
+struct OctreeFloats {
+    vec4 min_point;
+    float scale;
+    float inv_scale;
+};
+layout (shared, binding = 6) buffer OctreeFloatsBuffer {
+    OctreeFloats octree_floats[];
+};
+struct OctreeInts {
+    int current_max_depth;
+    int max_iter;
+    int cell_count;
+    int active_cell_count;
+};
+layout (shared, binding = 7) buffer OctreeIntsBuffer {
+    OctreeInts octree_ints[];
+};
+
+
+// Octree cell type
+const int EMPTY = 0;
+const int PARENT = 1; 
+const int LEAF = 2;
+struct Node {
+    // EMPTY    = not used,
+    // PARENT   = index to indirect cell
+    // LEAF     = index to material
+    uint value;
+    uint type; 
+};
+layout (shared, binding = 0) buffer IndirectCellBuffer {
+    Node indirect_cells[];
+};
+int IndirectCellIndex(ivec3 i) { return i.z + 2 * (i.y + 2 * i.x); }
+
+struct DeltaNode {
+    vec3 pos;
+    float type;
+    float value;
+};
+layout (std430, binding = 5) buffer DeltaNodeBuffer {
+    DeltaNode delta_nodes[];
+};
+
+/*
+    Find a leaf node for a given point
+    Make parent leaf if point does not have one
+*/
+int treeLookupLeaf(vec3 voxel_coord) {
+    vec3 depth_coords = voxel_coord;
+    Node node = Node(0, 0);
+    int index;
+   
+    for (float i = 0; i < octree_ints[0].current_max_depth - 1; i++) {
+        vec3 point_uv = fract(depth_coords);
+        point_uv.x = (node.value + point_uv.x) / octree_ints[0].cell_count;
+        ivec3 point = ivec3(round(fma(point_uv, vec3(octree_ints[0].cell_count * 2, 2, 2), vec3(-0.5))));
+
+        index = IndirectCellIndex(point);
+        if (indirect_cells[index].type == LEAF) { 
+            return index;
+        }
+        // race condition ...
+        if (atomicCompSwap(indirect_cells[index].type, EMPTY, PARENT) == EMPTY) {
+            indirect_cells[index].value = atomicAdd(octree_ints[0].active_cell_count, 1);
+        }
+        node = indirect_cells[index]; 
+
+        depth_coords = depth_coords * 2;
+    }
+    return index;
+}
+
+
+// TODO Camera uniform block to share memory between this and raytracer.comp
+//      also atomic counter cell count
+
+/*
+    - [x] step 0: asset changing octree works (empty the octree as a test) 
+    - [x] step 1: implement this shader so it can update a leaf node in existing cell
+    - [] step 2: implement this so it can create new cells from allocated memory
+        - [] this includes making atomic cell count
+    - [] step 3: implement emptying nodes (implicitly works from step 1)
+    - [] step 4: implement removing cell if it is empty after removing 
+    - [] step 4: implement removing hirearchies when emptying nodes
+*/
+
+void main() {
+    DeltaNode delta = delta_nodes[gl_GlobalInvocationID.x];
+    int index = treeLookupLeaf(delta.pos);
+    indirect_cells[index] = Node(uint(delta.value), uint(delta.type));
+}

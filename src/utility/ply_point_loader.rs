@@ -62,7 +62,6 @@ pub enum Identifier {
 pub enum Type {
     Pos(i32),
     Uchar(u8),
-    AlbedoIndex(usize)
 }
 
 #[derive(Debug)]
@@ -300,7 +299,6 @@ pub fn from_resources(resources: &Resources, name: &str) -> Result<PlyFileConten
                                 _ => {}   
                             }
                         }
-                        Type::AlbedoIndex(_) => return Err(ParseError::Unexpected(String::from("Type::AlbedoIndex"), state, offset))
                     };
                     voxel.albedo_key = cantor_pair(albedo);
                     
