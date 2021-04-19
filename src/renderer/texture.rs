@@ -1,7 +1,9 @@
 use gl::types::{GLenum, GLsizei, GLuint};
 
 use super::{InitializeErr, check_for_gl_error};
+use serde::{Serialize, Deserialize};
 
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Texture {
     id: u32,
     active: GLenum,

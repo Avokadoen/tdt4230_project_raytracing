@@ -44,6 +44,7 @@ impl Program {
         }
     }
 
+    #[allow(dead_code)]
     pub fn set_vector3_i32(&mut self, name: &str, value: cgmath::Vector3<i32>) -> Result<(), InitializeErr> {
         match self.register_uniform(name) {
             Ok(()) => {
@@ -56,6 +57,7 @@ impl Program {
         }
     }
 
+    #[allow(dead_code)]
     pub fn set_f32(&mut self, name: &str, value: f32) -> Result<(), InitializeErr> {
         match self.register_uniform(name) {
             Ok(()) => {

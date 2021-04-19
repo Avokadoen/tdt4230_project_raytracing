@@ -3,7 +3,16 @@ use cgmath::{InnerSpace, Quaternion, Rotation, Vector3};
 use crate::renderer::texture::Texture;
 
 use super::{InitializeErr, program::Program};
+use serde::{Serialize, Deserialize};
 
+#[derive(Debug, Deserialize, Serialize)]
+pub struct CameraSettings {
+    // TODO: these are only i32 because it is easier to send to GPU
+    pub samples_per_pixel: i32,
+    pub max_bounce: i32,
+    pub turn_rate: f32,
+    pub movement_speed: f32,
+}
 // TODO: camera should have a say when it comes to viewport and program window
 // TODO: some of the cameras variables can be remove as they are only used when 
 //       they are calculated (horizontal, vertical, lower_left_corner ...)
@@ -18,28 +27,23 @@ pub struct Camera {
     pitch: Quaternion<f32>,
     yaw: Quaternion<f32>,
     
-    // TODO: these are only i32 because it is easier to send to GPU
-    pub samples_per_pixel: i32,
-    pub max_bounce: i32,
-
     pub image_width: i32,
     pub image_height: i32,
     pub render_texture: Texture,
-
-    pub turn_rate: f32,
-    pub movement_speed: f32,
+    // TODO: rename configurable
+    pub settings: CameraSettings
 }
 
 impl Camera {
     pub fn translate(&mut self, program: &mut Program, by: &Vector3::<f32>, deltatime: f64) {
-        self.origin += self.orientation().rotate_vector(*by * deltatime as f32 * self.movement_speed);
+        self.origin += self.orientation().rotate_vector(*by * deltatime as f32 * self.settings.movement_speed);
         self.propagate_changes(program);
     }
      
     // turn in x axis
     pub fn turn_pitch(&mut self, program: &mut Program, angle: f32) {
         // Axis angle to quaternion: https://www.euclideanspace.com/maths/geometry/rotations/conversions/angleToQuaternion/index.htm
-        let h_angle = angle * self.turn_rate;
+        let h_angle = angle * self.settings.turn_rate;
         let i = h_angle.sin();
         let w = h_angle.cos();
         self.pitch = self.pitch * Quaternion::new(w, i, 0.0, 0.0).normalize();
@@ -48,7 +52,7 @@ impl Camera {
 
     // turn in y axis
     pub fn turn_yaw(&mut self, program: &mut Program, angle: f32) {
-        let h_angle = angle * self.turn_rate;
+        let h_angle = angle * self.settings.turn_rate;
         let j = h_angle.sin();
         let w = h_angle.cos();
         self.yaw = self.yaw * Quaternion::new(w, 0.0, j, 0.0).normalize();
@@ -76,7 +80,18 @@ impl Camera {
     }
 
     pub fn set_movement_speed(&mut self, movement_speed: f32) {
-        self.movement_speed = movement_speed;
+        self.settings.movement_speed = movement_speed;
+    }
+
+    pub fn look_at_world_point(&self, distance: f32) -> Vector3<f32> {
+        self.orientation().rotate_vector(Vector3::unit_z() * distance) + self.origin
+    }
+
+    pub fn apply_settings(&mut self, program: &mut Program, settings: CameraSettings) {
+        self.settings = settings;
+
+        program.set_i32("camera.samples_per_pixel", self.settings.samples_per_pixel).unwrap();
+        program.set_i32("camera.max_bounce", self.settings.max_bounce).unwrap();
     }
 }
 
@@ -156,10 +171,12 @@ impl CameraBuilder {
             image_width: self.image_width,
             image_height,
             render_texture,
-            samples_per_pixel: sample_per_pixel,
-            max_bounce,
-            turn_rate,
-            movement_speed,
+            settings: CameraSettings {
+                samples_per_pixel: sample_per_pixel,
+                max_bounce,
+                turn_rate,
+                movement_speed,
+            }
         };
 
         initial_uniforms(&camera, program);
@@ -196,6 +213,11 @@ impl CameraBuilder {
         self.max_bounce = Some(max_bounce);
         return self;
     }
+
+    pub fn with_movement_speed(&mut self, movement_speed: f32) -> &mut CameraBuilder {
+        self.movement_speed = Some(movement_speed);
+        return self;
+    }
 }
 
 
@@ -210,6 +232,6 @@ fn initial_uniforms(camera: &Camera, program: &mut Program) {
     program.set_vector3_f32("camera.lower_left_corner", camera.lower_left_corner).unwrap();
     program.set_vector3_f32("camera.origin", camera.origin).unwrap();
     
-    program.set_i32("camera.samples_per_pixel", camera.samples_per_pixel).unwrap();
-    program.set_i32("camera.max_bounce", camera.max_bounce).unwrap();
+    program.set_i32("camera.samples_per_pixel", camera.settings.samples_per_pixel).unwrap();
+    program.set_i32("camera.max_bounce", camera.settings.max_bounce).unwrap();
 }

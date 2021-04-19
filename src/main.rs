@@ -2,18 +2,19 @@ mod renderer;
 mod utility;
 mod resources;
 
-use glutin::{dpi::PhysicalSize, event::{DeviceEvent, ElementState::{Pressed, Released}, Event, KeyboardInput, VirtualKeyCode::{self, *}, WindowEvent}, event_loop::ControlFlow, window::Fullscreen};
+use glutin::{dpi::PhysicalSize, event::{DeviceEvent, ElementState::{self, Pressed, Released}, Event, KeyboardInput, VirtualKeyCode::{self, *}, WindowEvent}, event_loop::ControlFlow, window::Fullscreen};
 
 use cgmath::{Vector3};
 use std::{env, ffi::c_void, path::Path, sync::{Arc, Mutex, RwLock}, thread};
 
 use resources::Resources;
-use renderer::{Material, camera::{CameraBuilder}, compute_shader::ComputeShader, octree::{Octree}, program::Program, shader::Shader, vao::{
+use renderer::{Material, camera::{CameraBuilder, CameraSettings}, compute_shader::ComputeShader, octree::{Octree}, program::Program, shader::Shader, vao::{
         VertexArrayObject,
         VertexAttributePointer
     }, vbo::VertexBufferObject};
 
 use utility::{Direction, chronos::Chronos, ply_point_loader};
+
 
 // TODO: currently lots of opengl stuff. Move all of it into renderer module
 
@@ -22,7 +23,7 @@ fn main() {
     
     let el = glutin::event_loop::EventLoop::new();
     
-    let physical_size = PhysicalSize::new(1000, 1000);
+    let physical_size = PhysicalSize::new(1280, 720);
 
     let mut wb  = glutin::window::WindowBuilder::new()
         .with_title("TDT4230 Raytracer")
@@ -57,9 +58,8 @@ fn main() {
     let cb = glutin::ContextBuilder::new().with_vsync(true);
     
     let windowed_context = cb.with_vsync(true).build_windowed(wb, &el).unwrap();
-
     {
-        // This seems to fail at random on X11, so try a couple of times before panic
+        // This seems to fail at random on X11, so try a couple of times before failing
         const MAX_GRAB_ATTEMPTS: u32 = 20;
         'grab: for x in 0..MAX_GRAB_ATTEMPTS {
             match windowed_context.window().set_cursor_grab(true) {
@@ -85,12 +85,17 @@ fn main() {
     // Make a reference of this tuple to send to the render thread
     let mouse_delta = Arc::clone(&arc_mouse_delta);
 
+    // Set up shared device event storage
+    let arc_left_mouse_events = Arc::new(Mutex::new(false));
+    // Make a reference of this tuple to send to the render thread
+    let arc_left_mouse = Arc::clone(&arc_left_mouse_events);
+
+    let sf = windowed_context.window().scale_factor();
+    
+    let logical_dimensions = windowed_context.window().inner_size().to_logical::<i32>(sf);
+
     // Spawn a separate thread for rendering, so event handling doesn't block rendering
     let render_thread = thread::spawn(move || {
-        // windowed_context.window().
-        let sf = windowed_context.window().scale_factor();
-        let logical_dimensions = windowed_context.window().inner_size().to_logical::<i32>(sf);
-
         // Acquire the OpenGL Context and load the function pointers. This has to be done inside of the renderin thread, because
         // an active OpenGL context cannot safely traverse a thread boundary
         let context = unsafe {
@@ -100,7 +105,7 @@ fn main() {
         };
 
         unsafe {
-            gl::Viewport(0, 0, physical_size.width, physical_size.height); // set viewport
+            gl::Viewport(0, 0, logical_dimensions.width, logical_dimensions.height); // set viewport
             gl::ClearColor(0.0, 0.0, 0.0, 1.0);
         }
 
@@ -323,9 +328,23 @@ fn main() {
         loop {
             chronos.tick();
 
+            if let Ok(change) = camera_config_changed_render.lock() {
+                if *change {
+                    // TODO: really bad idea to do blocking io in render thread ...
+                    if let Ok(bytes) = res.load_buffer("settings/camera.ron") {
+                        match ron::de::from_bytes::<CameraSettings>(&bytes[0..]) {
+                            Ok(settings) => camera.apply_settings(&mut raytrace_program.program, settings),
+                            Err(_) => (),
+                        }
+                        
+                    }
+                }
+            }
+
+            // TODO: all these events should be a application specific enum to avoid all of these mutexes
             // Handle keyboard input
             if let Ok(keys) = pressed_keys.lock() {
-                let mut l_shift_used = false;
+                // let mut l_shift_used = false;
                 for key in keys.iter() {
                     match key {
                         VirtualKeyCode::W           => camera.translate(&mut raytrace_program.program, &Direction::Front.into_vector3(), chronos.delta_time()),
@@ -341,9 +360,9 @@ fn main() {
                         _ => { }
                     }
                 }
-                if !l_shift_used {
-                    camera.set_movement_speed(1.0);
-                }
+                // if !l_shift_used {
+                //     camera.set_movement_speed(1.0);
+                // }
             }
 
             // Handle mouse movement. delta contains the x and y movement of the mouse since last frame in pixels
@@ -464,5 +483,4 @@ fn main() {
             }
         }
     });
-    // texture delete ...
 }
