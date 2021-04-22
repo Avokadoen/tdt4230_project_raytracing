@@ -2,7 +2,7 @@ mod renderer;
 mod utility;
 mod resources;
 
-use glutin::{dpi::PhysicalSize, event::{DeviceEvent, ElementState::{self, Pressed, Released}, Event, KeyboardInput, VirtualKeyCode::{self, *}, WindowEvent}, event_loop::ControlFlow, window::Fullscreen};
+use glutin::{ContextWrapper, GlProfile, NotCurrent, dpi::PhysicalSize, event::{DeviceEvent, ElementState::{self, Pressed, Released}, Event, KeyboardInput, VirtualKeyCode::{self, *}, WindowEvent}, event_loop::ControlFlow, window::{Fullscreen, Window}};
 
 use cgmath::{Vector3};
 use std::{env, ffi::c_void, path::Path, sync::{Arc, Mutex, RwLock}, thread};
@@ -55,7 +55,8 @@ fn main() {
         }
     }
 
-    let cb = glutin::ContextBuilder::new().with_vsync(true);
+    let cb = glutin::ContextBuilder::new()
+        .with_gl_profile(GlProfile::Core).with_vsync(true);
     
     let windowed_context = cb.with_vsync(true).build_windowed(wb, &el).unwrap();
     {
@@ -85,8 +86,14 @@ fn main() {
     // Make a reference of this tuple to send to the render thread
     let mouse_delta = Arc::clone(&arc_mouse_delta);
 
+    #[derive(Clone, Copy)]
+    enum ClickEvent {
+        None = 2,
+        Left = 1,
+        Right = 0
+    }
     // Set up shared device event storage
-    let arc_left_mouse_events = Arc::new(Mutex::new(false));
+    let arc_left_mouse_events = Arc::new(Mutex::new(ClickEvent::None));
     // Make a reference of this tuple to send to the render thread
     let arc_left_mouse = Arc::clone(&arc_left_mouse_events);
 
@@ -103,7 +110,6 @@ fn main() {
             gl::load_with(|symbol| c.get_proc_address(symbol) as *const c_void);
             c
         };
-
         unsafe {
             gl::Viewport(0, 0, logical_dimensions.width, logical_dimensions.height); // set viewport
             gl::ClearColor(0.0, 0.0, 0.0, 1.0);
@@ -157,8 +163,8 @@ fn main() {
         let camera_config_changed_render = Arc::clone(&camera_config_changed);
         let mut camera = {
             let mut builder = CameraBuilder::new(90.0, logical_dimensions.width as i32);
-            builder.with_aspect_ratio(logical_dimensions.width as f32 / logical_dimensions.height as f32 )
-                .with_origin(Vector3::<f32>::new(0.0, 0.0, 0.0))
+            builder.with_aspect_ratio(logical_dimensions.width as f32 / logical_dimensions.height as f32)
+                .with_origin(Vector3::<f32>::new(0.0, -0.1, -0.3))
                 .with_viewport_height(2.0); 
 
             if let Ok(bytes) = res.load_buffer("settings/camera.ron") {
@@ -166,7 +172,8 @@ fn main() {
                 builder.with_sample_per_pixel(settings.samples_per_pixel)
                     .with_max_bounce(settings.max_bounce)
                     .with_turn_rate(settings.turn_rate)
-                    .with_movement_speed(settings.movement_speed);
+                    .with_normal_speed(settings.normal_speed)
+                    .with_sprint_speed(settings.sprint_speed);
 
                 let watch_path = res.to_abs_path("settings");
                 let _camera_watcher = thread::spawn(move || {
@@ -174,7 +181,6 @@ fn main() {
                     use std::time;
                     use notify::{Watcher, DebouncedEvent};
         
-                    // Create a channel to receive the events.
                     let (tx, rx) = mpsc::channel();
                     let mut watcher = notify::watcher(tx, time::Duration::from_secs_f32(1.0)).unwrap();
                     watcher.watch(watch_path, notify::RecursiveMode::Recursive).unwrap();
@@ -185,6 +191,7 @@ fn main() {
                                 match event {
                                     DebouncedEvent::Write(p) => {
                                         if p.ends_with("camera.ron") {
+                                            println!("Camera settings changed");
                                             if let Ok(mut v) = camera_config_changed.lock() {
                                                 *v = true;
                                             }
@@ -208,6 +215,7 @@ fn main() {
         // This is somewhat bad practice, but in our case, the consequenses are non existent
         camera.render_texture.bind();
 
+        // TODO: use this data
         // let content = match ply_point_loader::from_resources(&res, "models/3x3x3_point.ply") {
         //     Err(e) => {
         //         panic!("{}", e);
@@ -224,16 +232,16 @@ fn main() {
         // TODO: vao might not be needed for shader storage buffer? read spec 
         //       and update code accordingly
         let octree = { 
-            const PRE_ALLOCATED_CELLS: usize = 1000;
+            const PRE_ALLOCATED_CELLS: usize = 100000;
             let vao = {
                 use renderer::octree::{EMPTY, PARENT, LEAF};
                 let mut allocated_cells =  Vec::<u32>::with_capacity(PRE_ALLOCATED_CELLS * 8 * 2);
                 allocated_cells.append(& mut vec![
                     // cell 0 (root)
                     1, PARENT,  1, EMPTY, 
-                    1, EMPTY,    1, EMPTY,
-                    1, EMPTY,    1, EMPTY, 
-                    1, EMPTY,    1, PARENT,
+                    1, EMPTY,   10, PARENT,
+                    1, EMPTY,   1, EMPTY, 
+                    1, EMPTY,   1, PARENT,
                     // cell 1
                     2, PARENT,  2, PARENT, 
                     2, PARENT,  2, PARENT,
@@ -264,16 +272,71 @@ fn main() {
                     7, PARENT, 7, PARENT,
                     7, PARENT, 7, PARENT, 
                     7, PARENT, 7, PARENT,
+                    // cell 7
+                    8, PARENT, 8, PARENT, 
+                    8, PARENT, 8, PARENT,
+                    8, PARENT, 8, PARENT, 
+                    8, PARENT, 8, PARENT,
                     // cell 8
+                    9, EMPTY, 9, PARENT, 
+                    9, PARENT, 9, EMPTY,
+                    9, EMPTY, 9, PARENT, 
+                    9, PARENT, 9, PARENT,
+                    // cell 9
                     0, LEAF, 2, LEAF, 
                     0, LEAF, 1, LEAF,
                     0, LEAF, 3, LEAF, 
                     0, LEAF, 0, LEAF,
+                    // cell 10
+                    11, PARENT,  11, PARENT, 
+                    11, EMPTY,  11, EMPTY,
+                    11, EMPTY,  11, EMPTY, 
+                    11, PARENT,  11, PARENT,
+                    // cell 11
+                    12, PARENT,  12, PARENT, 
+                    12, PARENT,  12, PARENT,
+                    12, PARENT,  12, PARENT, 
+                    12, PARENT,  12, PARENT,
+                    // cell 12
+                    13, PARENT,  13, PARENT, 
+                    13, PARENT,  13, PARENT,
+                    13, PARENT,  13, PARENT, 
+                    13, PARENT,  13, PARENT,
+                    // cell 13
+                    14, PARENT,  14, PARENT, 
+                    14, PARENT,  14, PARENT, 
+                    14, PARENT,  14, PARENT,
+                    14, PARENT,  14, PARENT,
+                    // cell 14
+                    15, PARENT,  15, PARENT, 
+                    15, PARENT,  15, PARENT,
+                    15, PARENT,  15, PARENT, 
+                    15, PARENT,  15, PARENT,
+                    // cell 15
+                    16, PARENT, 16, PARENT, 
+                    16, PARENT, 16, PARENT,
+                    16, PARENT, 16, PARENT, 
+                    16, PARENT, 16, PARENT,
+                    // cell 16
+                    17, PARENT, 17, PARENT, 
+                    17, PARENT, 17, PARENT,
+                    17, PARENT, 17, PARENT, 
+                    17, PARENT, 17, PARENT,
+                    // cell 17
+                    18, PARENT, 18, PARENT, 
+                    18, PARENT, 18, PARENT,
+                    18, PARENT, 18, PARENT, 
+                    18, PARENT, 18, PARENT,
+                    // cell 18
+                    7, LEAF, 2, LEAF, 
+                    6, LEAF, 1, LEAF,
+                    0, LEAF, 3, LEAF, 
+                    0, LEAF, 5, LEAF,
                     // ------
                 ]);
 
                 // 8 nodes, 2 ints per node, 8 cells
-                for _ in 8 * 2 * 8..PRE_ALLOCATED_CELLS {
+                for _ in 8 * 2 * 10..PRE_ALLOCATED_CELLS {
                     allocated_cells.push(EMPTY);
                 }
     
@@ -298,7 +361,7 @@ fn main() {
                 let metal = Material::Metal as u32;
                 let mat_vbo = VertexBufferObject::new::<u32>(
                     vec![
-                    // |Type  |Attrib |Albedo index|
+                    // |Type  |Attrib |Albedo |
                         lambe,  0,      0,
                         lambe,  0,      1, 
                         diele,  0,      2,  
@@ -392,9 +455,9 @@ fn main() {
             let o = Octree::new(
                 Vector3::new(-0.5, -0.5, -1.0), 
                 1.0, 
-                8, 
+                10, 
                 PRE_ALLOCATED_CELLS as i32, 
-                9,
+                19,
                 100, 
                 vao
             ).unwrap();
@@ -416,6 +479,9 @@ fn main() {
             delta.push(0.0);
         }
 
+        let click_cooldown = 0.05;
+        let mut last_click_count = 0.0;
+        let mut active_voxel = 0;
         let render_size = (camera.render_texture.width(), camera.render_texture.height(), camera.render_texture.depth());
         loop {
             chronos.tick();
@@ -436,7 +502,7 @@ fn main() {
             // TODO: all these events should be a application specific enum to avoid all of these mutexes
             // Handle keyboard input
             if let Ok(keys) = pressed_keys.lock() {
-                // let mut l_shift_used = false;
+                let mut l_shift_used = false;
                 for key in keys.iter() {
                     match key {
                         VirtualKeyCode::W           => camera.translate(&mut raytrace_program.program, &Direction::Front.into_vector3(), chronos.delta_time()),
@@ -446,16 +512,25 @@ fn main() {
                         VirtualKeyCode::Space       => camera.translate(&mut raytrace_program.program, &Direction::Up.into_vector3(),    chronos.delta_time()),
                         VirtualKeyCode::LControl    => camera.translate(&mut raytrace_program.program, &Direction::Down.into_vector3(),  chronos.delta_time()),
                         VirtualKeyCode::G           => octree.update_vbo(&delta, delta.len(), &octree_update_program),
-                        // VirtualKeyCode::LShift      => {
-                        //     camera.set_movement_speed(4.0);
-                        //     l_shift_used = true;
-                        // },
+                        VirtualKeyCode::Key1        => active_voxel = 0,
+                        VirtualKeyCode::Key2        => active_voxel = 1,
+                        VirtualKeyCode::Key3        => active_voxel = 2,
+                        VirtualKeyCode::Key4        => active_voxel = 3,
+                        VirtualKeyCode::Key5        => active_voxel = 4,
+                        VirtualKeyCode::Key6        => active_voxel = 6,
+                        VirtualKeyCode::Key7        => active_voxel = 7,
+                        VirtualKeyCode::Key8        => active_voxel = 8,
+                        VirtualKeyCode::Key9        => active_voxel = 9,
+                        VirtualKeyCode::LShift      => {
+                            camera.set_speed_to_sprint();
+                            l_shift_used = true;
+                        },
                         _ => { }
                     }
                 }
-                // if !l_shift_used {
-                //     camera.set_movement_speed(1.0);
-                // }
+                if !l_shift_used {
+                    camera.set_speed_to_normal();
+                }
             }
 
             // Handle mouse movement. delta contains the x and y movement of the mouse since last frame in pixels
@@ -472,23 +547,33 @@ fn main() {
                 *delta = (0.0, 0.0);
             }
 
-            if let Ok(device_events) = arc_left_mouse.lock() {
-                if *device_events {
-                    let mut spawn_point = camera.look_at_world_point(octree.block_distance() * 4.0);
-                    if octree.point_inside(&spawn_point) {
-                        spawn_point = spawn_point - octree.min_point();
-                        // move spawn_point into a unit square
-                        spawn_point /= octree.scale();
-                        delta[0] = spawn_point.x.abs();
-                        delta[1] = spawn_point.y.abs(); 
-                        delta[2] = spawn_point.z.abs();
-                        delta[3] = 2.0;
-                        delta[4] = 1.0;
-                        println!("{}, {}, {}", delta[0], delta[1], delta[2]);
-                        octree.update_vbo(&delta, 5, &octree_update_program);
+            if last_click_count >= click_cooldown {
+                if let Ok(device_event) = arc_left_mouse.lock() {
+                    let event = *device_event;
+                    match event {
+                        ClickEvent::Left | ClickEvent::Right => {
+                            let mut spawn_point = camera.look_at_world_point(octree.block_distance() * 4.0);
+                            if octree.point_inside(&spawn_point) {
+                                last_click_count = 0.0;
+                                spawn_point = spawn_point - octree.min_point();
+                                // move spawn_point into a unit square
+                                spawn_point /= octree.scale();
+                                delta[0] = spawn_point.x.abs();
+                                delta[1] = spawn_point.y.abs(); 
+                                delta[1] = spawn_point.y.abs(); 
+                                delta[1] = spawn_point.y.abs(); 
+                                delta[2] = spawn_point.z.abs();
+                                delta[3] = 2.0 * (event as i32 as f32);
+                                delta[4] = active_voxel as f32;
+                                octree.update_vbo(&delta, 5, &octree_update_program);
+                            }
+                        }
+                        ClickEvent::None => (),
                     }
-                }
+                } 
             } 
+            last_click_count += chronos.delta_time();
+            
             
             octree.vao.bind();
             raytrace_program.dispatch_compute(render_size.0 + 1, render_size.1 + 1, render_size.2);
@@ -585,10 +670,17 @@ fn main() {
                     }
                 },
                 Event::DeviceEvent { event: DeviceEvent::Button { button, state }, .. } => {
-                    if button == 1 {
-                        if let Ok(mut device_event) = arc_left_mouse_events.lock() {
-                            *device_event = state == ElementState::Pressed;
+                    let mut event = ClickEvent::None;
+                    if state == ElementState::Pressed {
+                        if button == 1 {
+                            event = ClickEvent::Left;
+                        } else if button == 3 {
+                            event = ClickEvent::Right;
                         }
+                    }
+
+                    if let Ok(mut device_event) = arc_left_mouse_events.lock() {
+                        *device_event = event;
                     }
                 }
                 _ => { }

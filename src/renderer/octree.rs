@@ -46,6 +46,7 @@ impl Octree {
                     self.min_point.x, self.min_point.y, self.min_point.z, 0.0,
                     self.scale,
                     1.0 / self.scale,
+                    1.0 / self.cell_count as f32, 
                 ],
                 gl::ARRAY_BUFFER,
                 gl::DYNAMIC_COPY
@@ -60,9 +61,14 @@ impl Octree {
                 size: 2, 
                 offset: 4
             };
+            let attrib_inv_cell_count = vao::VertexAttributePointer {
+                location: 10,
+                size: 1, 
+                offset: 6
+            };
             unsafe { gl::BindBufferBase(gl::SHADER_STORAGE_BUFFER, 6, float_vbo.id()); } 
             unsafe { super::check_for_gl_error()?; }
-            self.vao.append_vbo::<f32>(vec![attrib_min, attrib_scales], float_vbo.id(), gl::FLOAT);
+            self.vao.append_vbo::<f32>(vec![attrib_min, attrib_scales, attrib_inv_cell_count], float_vbo.id(), gl::FLOAT);
             unsafe { super::check_for_gl_error()?; }
         }
 
@@ -72,40 +78,45 @@ impl Octree {
                     self.max_depth,
                     self.max_traversal_iter,
                     self.cell_count,
-                    self.active_cell_count,
-                    (self.cell_count * 2), 2, 2, 0,
                 ],
                 gl::ARRAY_BUFFER,
                 gl::DYNAMIC_COPY
             );
             let attrib_depth = vao::VertexAttributePointer {
-                location: 10,
+                location: 11,
                 size: 1, 
                 offset: 0
             };
             let attrib_max_iter = vao::VertexAttributePointer {
-                location: 11,
+                location: 12,
                 size: 1, 
                 offset: 1
             };
             let attrib_cell_count = vao::VertexAttributePointer {
-                location: 12,
+                location: 13,
                 size: 1, 
                 offset: 2
             };
-            let attrib_active_cell_count = vao::VertexAttributePointer {
-                location: 13,
-                size: 1, 
-                offset: 3
-            };
-            let attrib_indirect = vao::VertexAttributePointer {
-                location: 14,
-                size: 4, 
-                offset: 4
-            };
             unsafe { gl::BindBufferBase(gl::SHADER_STORAGE_BUFFER, 7, int_vbo.id()); } 
             unsafe { super::check_for_gl_error()?; }
-            self.vao.append_vbo::<i32>(vec![attrib_depth, attrib_indirect, attrib_max_iter, attrib_cell_count], int_vbo.id(), gl::INT);
+            self.vao.append_vbo::<i32>(vec![attrib_depth, attrib_max_iter, attrib_cell_count], int_vbo.id(), gl::INT);
+            unsafe { super::check_for_gl_error()?; }
+            
+            let atmoic_counter_vbo = vbo::VertexBufferObject::new::<i32>(
+                vec![
+                    self.active_cell_count
+                ],
+                gl::ATOMIC_COUNTER_BUFFER,
+                gl::DYNAMIC_COPY
+            );
+            let attrib_active_cell_count = vao::VertexAttributePointer {
+                location: 14,
+                size: 1, 
+                offset: 0
+            };
+            unsafe { gl::BindBufferBase(gl::ATOMIC_COUNTER_BUFFER, 0,  atmoic_counter_vbo.id()); } 
+            unsafe { super::check_for_gl_error()?; }
+            self.vao.append_vbo::<i32>(vec![attrib_active_cell_count], atmoic_counter_vbo.id(), gl::INT);
             unsafe { super::check_for_gl_error()?; }
         }
 
@@ -115,14 +126,24 @@ impl Octree {
                 gl::ARRAY_BUFFER,
                 gl::DYNAMIC_COPY
             );
-            let attrib_delta = vao::VertexAttributePointer {
+            let attrib_pos = vao::VertexAttributePointer {
                 location: 14,
-                size: 4, 
+                size: 3, 
                 offset: 0
             };
+            // let attrib_type = vao::VertexAttributePointer {
+            //     location: 15,
+            //     size: 1, 
+            //     offset: 3
+            // };
+            // let attrib_value = vao::VertexAttributePointer {
+            //     location: 16,
+            //     size: 1, 
+            //     offset: 4
+            // };
             unsafe { gl::BindBufferBase(gl::SHADER_STORAGE_BUFFER, 5, update_vbo.id()); } 
             unsafe { super::check_for_gl_error()?; }
-            self.vao.append_vbo::<i32>(vec![attrib_delta], update_vbo.id(), gl::INT);
+            self.vao.append_vbo::<f32>(vec![attrib_pos], update_vbo.id(), gl::INT);
             unsafe { super::check_for_gl_error()?; }
         }
 
@@ -147,8 +168,17 @@ impl Octree {
     }
 
     pub fn update_vbo(&self, delta: &Vec::<f32>, len: usize, update_compute: &ComputeShader) {
+        const LOCAL_GROUP_SIZE_X: f32 = 32.0 * 32.0;
+
         let size = (len * std::mem::size_of::<f32>()) as gl::types::GLsizeiptr; // size of data in bytes
         unsafe { gl::BufferSubData(gl::SHADER_STORAGE_BUFFER, 0, size, delta.as_ptr() as *const gl::types::GLvoid); }
-        update_compute.dispatch_compute((len as f32 * 0.2) as i32, 1, 1)
+        
+        let x_schedule = len as f32 * 0.2; 
+        let dispatch_count = (len as f32 * 0.2) as i32;
+        if (x_schedule / LOCAL_GROUP_SIZE_X).fract() != 0.0 {
+            update_compute.dispatch_compute(0, dispatch_count, 0)
+        } else {
+            update_compute.dispatch_compute(dispatch_count, 1, 1)
+        }
     }
 }

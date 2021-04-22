@@ -91,6 +91,7 @@ struct OctreeFloats {
     vec4 min_point;
     float scale;
     float inv_scale;
+    float inv_cell_count;
 };
 layout (shared, binding = 6) buffer OctreeFloatsBuffer {
     OctreeFloats octree_floats[];
@@ -99,13 +100,10 @@ struct OctreeInts {
     int max_depth;
     int max_iter;
     int cell_count;
-    int active_cell_count;
 };
 layout (shared, binding = 7) buffer OctreeIntsBuffer {
     OctreeInts octree_ints[];
 };
-
-
 
 // Octree cell type
 const int EMPTY = 0;
@@ -176,15 +174,15 @@ void main() {
     for (int i = 0; i < camera.samples_per_pixel; i++) {
         float x = float(pixel_coord.x);
         float y = float(pixel_coord.y);
+        // TODO: remove division
         float u = (x + Rand(vec2(x + i, y))) / (camera.image_width - 1);
         float v = (y + Rand(vec2(x, y + i))) / (camera.image_height - 1);
         Ray ray = CameraGetRay(camera, u, v);
         color += RayColor(ray);
     }
 
-    float scale = 1.0 / camera.samples_per_pixel;
-    color = clamp(color * scale, 0, 1);
-    color = sqrt(color);
+    color = sqrt(color / camera.samples_per_pixel);
+    color = clamp(color, 0, 1);
     imageStore(img_output, pixel_coord, vec4(color, 1.0));
 }
 
@@ -248,7 +246,7 @@ vec3 AlbedoColor(uint index) {
     return vec3(a.x, a.y, a.z);
 }
 
-// TODO: Source: (Ray tracing gems 2) / Peter Shirley
+// TODO: Source: (Ray tracing gems 2) / Peter Shirley / http://jcgt.org/published/0007/03/04/
 bool CubeHit(vec3 cmin, float size, Ray r, float t_min, inout float t_max, out HitRecord hit, out float dot_p) {
     vec3 cmax = cmin + vec3(size);
 
@@ -294,25 +292,24 @@ bool CubeHit(vec3 cmin, float size, Ray r, float t_min, inout float t_max, out H
 // Should only be use in OctreeHit
 bool treeLookup(
     vec3 voxel_coord,       // point we are doing lookup with in image coordinates
-    out float depth,
-    out float pow_depth,    // depth of current lookup node
+    out float inv_pow_depth,    // depth of current lookup node
     out vec3 grid_uv,        // uv coordinates of node in grid
     out Node node
 ) {
+    vec3 indirect_cell_dim = vec3(octree_ints[0].cell_count * 2, 2, 2);
     vec3 depth_coords = voxel_coord;
     
     node = Node(0, 0);
-    pow_depth = 1;
+    inv_pow_depth = 1;
     grid_uv = vec3(0);
-    depth = 0;
    
     for (float i = 0; i < octree_ints[0].max_depth; i++) {
-        pow_depth = pow_depth * 2;
+        inv_pow_depth = inv_pow_depth * 0.5;
         vec3 point_uv = fract(depth_coords);
-        point_uv.x = (node.value + point_uv.x) / octree_ints[0].cell_count;
+        point_uv.x = (node.value + point_uv.x) * octree_floats[0].inv_cell_count;
         ivec3 point = ivec3(round(fma(point_uv, vec3(octree_ints[0].cell_count * 2, 2, 2), vec3(-0.5))));
 
-        vec3 added_uv = (mod(point, 2) / pow_depth);
+        vec3 added_uv = (mod(point, 2) * inv_pow_depth);
         grid_uv += added_uv;
 
         node = AccessIndirectCell(point);
@@ -326,20 +323,18 @@ bool treeLookup(
         } 
 
         depth_coords = depth_coords * 2;
-        depth + 1;
     }
     return false;
 }
 
 // Traverse octree and check for hits in leaf nodes
 bool OctreeHit(Ray r, float t_min, float t_max, out HitRecord hit) {
-    const float base_t_advance = 0.001;
+    const float base_t_advance = 0.00001;
     vec3 c_min = octree_floats[0].min_point.xyz;
     float c_scale = octree_floats[0].scale;
     HitRecord c_hit;
     float dot_p;
-    float pow_depth = 2;
-    float depth = 0; 
+    float inv_pow_depth = 0.5;
 
     // record t size of octree relative to ray
     float t_octree_max = t_max;
@@ -347,7 +342,7 @@ bool OctreeHit(Ray r, float t_min, float t_max, out HitRecord hit) {
     float t_stride = c_hit.t;
     
     for (int i = 0; i < octree_ints[0].max_iter && cube_hit; i++) { 
-        float min_t_advance = base_t_advance / ((depth + 1) * 8); // TODO: dot_p
+        float min_t_advance = base_t_advance; // * (inv_pow_depth + 0.2); //* (1 - dot_p + 0.1); 
         vec3 world_point = RayAt(r, t_stride + min_t_advance);
         vec3 lookup_point = (world_point - octree_floats[0].min_point.xyz) * octree_floats[0].inv_scale;
         // TODO: This hack checks explicitly if lookup is not in octree, this should
@@ -358,12 +353,12 @@ bool OctreeHit(Ray r, float t_min, float t_max, out HitRecord hit) {
 
         vec3 grid_uv;
         Node node;
-        if (treeLookup(lookup_point, depth, pow_depth, grid_uv, node)) {
+        if (treeLookup(lookup_point, inv_pow_depth, grid_uv, node)) {
             // TODO: code should be restructured to not need this branch as it is the 
             //       same code as some code further down
             if (i > 0) {
                 c_min = fma(grid_uv, vec3(octree_floats[0].scale), octree_floats[0].min_point.xyz);
-                c_scale = octree_floats[0].scale / pow_depth;  
+                c_scale = octree_floats[0].scale * inv_pow_depth;  
                 
                 t_min = t_stride;
                 t_stride = t_octree_max;
@@ -376,7 +371,7 @@ bool OctreeHit(Ray r, float t_min, float t_max, out HitRecord hit) {
         }
 
         c_min = fma(grid_uv, vec3(octree_floats[0].scale), octree_floats[0].min_point.xyz);
-        c_scale = octree_floats[0].scale / pow_depth;  
+        c_scale = octree_floats[0].scale * inv_pow_depth;  
         
         t_min = t_stride;
         t_stride = t_octree_max;

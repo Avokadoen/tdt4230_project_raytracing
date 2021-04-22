@@ -3,7 +3,7 @@
 This is a fork of [GPUPE](https://github.com/Avokadoen/GPUPE) with the aim of implementing raytracing on 
 opengl compute shaders using [Raytracing in one weekend](https://raytracing.github.io/books/RayTracingInOneWeekend.html).
 
-![demo](https://i.imgur.com/UmeLhen.gif)
+[![Demo](https://img.youtube.com/vi/5jLadHg7BZ4/0.jpg)](https://www.youtube.com/watch?v=5jLadHg7BZ4)
 
 # Report with explanation of code
 

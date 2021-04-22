@@ -11,7 +11,8 @@ pub struct CameraSettings {
     pub samples_per_pixel: i32,
     pub max_bounce: i32,
     pub turn_rate: f32,
-    pub movement_speed: f32,
+    pub normal_speed: f32,
+    pub sprint_speed: f32,
 }
 // TODO: camera should have a say when it comes to viewport and program window
 // TODO: some of the cameras variables can be remove as they are only used when 
@@ -31,12 +32,13 @@ pub struct Camera {
     pub image_height: i32,
     pub render_texture: Texture,
     // TODO: rename configurable
-    pub settings: CameraSettings
+    pub settings: CameraSettings,
+    pub movement_speed: f32,
 }
 
 impl Camera {
     pub fn translate(&mut self, program: &mut Program, by: &Vector3::<f32>, deltatime: f64) {
-        self.origin += self.orientation().rotate_vector(*by * deltatime as f32 * self.settings.movement_speed);
+        self.origin += self.orientation().rotate_vector(*by * deltatime as f32 * self.movement_speed);
         self.propagate_changes(program);
     }
      
@@ -79,12 +81,16 @@ impl Camera {
         program.set_vector3_f32("camera.origin", self.origin).unwrap();
     }
 
-    pub fn set_movement_speed(&mut self, movement_speed: f32) {
-        self.settings.movement_speed = movement_speed;
+    pub fn set_speed_to_normal(&mut self) {
+        self.movement_speed = self.settings.normal_speed;
+    }
+
+    pub fn set_speed_to_sprint(&mut self) {
+        self.movement_speed = self.settings.sprint_speed;
     }
 
     pub fn look_at_world_point(&self, distance: f32) -> Vector3<f32> {
-        self.orientation().rotate_vector(Vector3::unit_z() * distance) + self.origin
+        self.orientation().rotate_vector(-Vector3::unit_z() * distance) + self.origin
     }
 
     pub fn apply_settings(&mut self, program: &mut Program, settings: CameraSettings) {
@@ -105,7 +111,8 @@ pub struct CameraBuilder {
     samples_per_pixel: Option<i32>,
     max_bounce: Option<i32>,
     turn_rate: Option<f32>,
-    movement_speed: Option<f32>,
+    normal_speed: Option<f32>,
+    sprint_speed: Option<f32>,
 }
 
 impl CameraBuilder {
@@ -120,7 +127,8 @@ impl CameraBuilder {
             samples_per_pixel: None,
             max_bounce: None,
             turn_rate: None,
-            movement_speed: None,
+            normal_speed: None,
+            sprint_speed: None,
         }
     }
 
@@ -157,7 +165,8 @@ impl CameraBuilder {
         )?;
 
         let turn_rate = self.turn_rate.unwrap_or(0.025);
-        let movement_speed = self.movement_speed.unwrap_or(1.0);
+        let normal_speed = self.normal_speed.unwrap_or(1.0);
+        let sprint_speed = self.sprint_speed.unwrap_or(normal_speed * 2.0);
 
         let camera = Camera {
             horizontal,
@@ -175,8 +184,10 @@ impl CameraBuilder {
                 samples_per_pixel: sample_per_pixel,
                 max_bounce,
                 turn_rate,
-                movement_speed,
-            }
+                normal_speed,
+                sprint_speed
+            },
+            movement_speed: normal_speed
         };
 
         initial_uniforms(&camera, program);
@@ -214,8 +225,13 @@ impl CameraBuilder {
         return self;
     }
 
-    pub fn with_movement_speed(&mut self, movement_speed: f32) -> &mut CameraBuilder {
-        self.movement_speed = Some(movement_speed);
+    pub fn with_normal_speed(&mut self, normal_speed: f32) -> &mut CameraBuilder {
+        self.normal_speed = Some(normal_speed);
+        return self;
+    }
+
+    pub fn with_sprint_speed(&mut self, sprint_speed: f32) -> &mut CameraBuilder {
+        self.sprint_speed = Some(sprint_speed);
         return self;
     }
 }

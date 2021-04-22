@@ -3,5 +3,6 @@ CameraSettings(
     samples_per_pixel: 4,
     max_bounce: 6,
     turn_rate: 0.05,
-    movement_speed: 0.2,
+    normal_speed: 0.03,
+    sprint_speed: 0.15,
 )
