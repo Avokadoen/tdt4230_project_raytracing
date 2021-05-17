@@ -5,9 +5,21 @@ opengl compute shaders using [Raytracing in one weekend](https://raytracing.gith
 
 [![Demo](https://img.youtube.com/vi/5jLadHg7BZ4/0.jpg)](https://www.youtube.com/watch?v=5jLadHg7BZ4)
 
-# Report with explanation of code
+# How to build
 
-TODO
+Download [rustup](https://www.rust-lang.org/learn/get-started). Code is tested with rustc version 1.51
+
+When that is done you should be able to run ```cargo run``` from the project folders
+
+# Keydindings
+
+* wasd - move camera
+* mouse movement - turn camera
+* ctr - move down
+* space - move up
+* left mouse - spawn voxel
+* right mouse - remove voxel
+* 1 -> 9 - change voxel spawn type
 
 # Sources
 
@@ -29,4 +41,8 @@ Using opengl compute shaders: https://antongerdelan.net/opengl/compute.html
 
 Reading vbo in compute shader: https://stackoverflow.com/a/21344861/11768869
 
-Blue noise texure: http://momentsingraphics.de/BlueNoise.html
+Generating blue noise: https://blog.demofox.org/2017/10/20/generating-blue-noise-sample-points-with-mitchells-best-candidate-algorithm/
+
+Distributed hemosphere unit vector: http://jcgt.org/published/0007/04/01/
+
+Frisvad orthogonal vectors: https://backend.orbit.dtu.dk/ws/portalfiles/portal/126824972/onb_frisvad_jgt2012_v2.pdf
