@@ -111,7 +111,7 @@ fn main() {
             c
         };
         unsafe {
-            gl::Viewport(0, 0, logical_dimensions.width, logical_dimensions.height); // set viewport
+            gl::Viewport(0, 0, physical_size.width, physical_size.height); // set viewport
             gl::ClearColor(0.0, 0.0, 0.0, 1.0);
         }
 
