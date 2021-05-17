@@ -18,8 +18,39 @@ bool IsNearZero(vec3 v) {
     return (abs(v.x) < s) && (abs(v.y) < s) && (abs(v.z) < s);
 }
 
+// TODO: fma
+// Source: http://jcgt.org/published/0007/04/01/
+// Input inv_view_dir: inverse view direction
+// Input alpha: roughness parameter
+// Input U: uniform random numbers
+// Output Ne: normal sampled with PDF D_Ve(Ne) = G1(Ve) * max(0, dot(Ve, Ne)) * D(Ne) / Ve.z
+vec3 SampleGGXVNDF(vec3 inv_view_dir, vec2 alpha, vec2 U) {
+    // transforming the view direction to the hemisphere configuration
+    vec3 Vh = normalize(vec3(alpha.x * inv_view_dir.x, alpha.y * inv_view_dir.y, inv_view_dir.z));
+    
+    // orthonormal basis (with special case if cross product is zero)
+    float lensq = Vh.x * Vh.x + Vh.y * Vh.y;
+    vec3 T1 = lensq > 0 ? vec3(-Vh.y, Vh.x, 0) * inversesqrt(lensq) : vec3(1, 0, 0);
+    vec3 T2 = cross(Vh, T1);
+
+    // parameterization of the projected area
+    float r = sqrt(U.x);
+    float phi = 2.0 * pi * U.y;
+    float t1 = r * cos(phi);
+    float t2 = r * sin(phi);
+    float s = 0.5 * (1.0 + Vh.z);
+    t2 = (1.0 - s) * sqrt(1.0 - t1 * t1) + s * t2;
+    
+    // reprojection onto hemisphere
+    vec3 Nh = t1 * T1 + t2 * T2 + sqrt(max(0.0, 1.0 - t1 * t1 - t2 * t2)) * Vh;
+    
+    // transforming the normal back to the ellipsoid configuration
+    return normalize(vec3(alpha.x * Nh.x, alpha.y * Nh.y, max(0.0, Nh.z)));
+}
+
+
 float Rand(float co) { return fract(sin(co*(91.3458)) * 47453.5453); }
-float Rand(vec2 co){ return fract(sin(dot(co.xy ,vec2(12.9898,78.233))) * 43758.5453); }
+float Rand(vec2 co){ return fract(sin(dot(co.xy, vec2(12.9898,78.233))) * 43758.5453); }
 float Rand(vec3 co){ return Rand(co.xy+Rand(co.z)); }
 float Rand(vec2 co, float min, float max) {
     return min + (max - min) * Rand(co);
@@ -36,8 +67,41 @@ vec3 RandVec3(vec2 co, float min, float max) {
     float z = Rand(vec2(co.x + y, co.y + y), min, max);
     return vec3(x, y, z);
 }
-vec3 RandUnitVector(vec2 co) {
-    return normalize(RandVec3(co, -1, 1));
+// Source: https://www.shadertoy.com/view/4djSRW
+float hash12(vec2 p) {
+	vec3 p3  = fract(vec3(p.xyx) * .1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.x + p3.y) * p3.z);
+}
+float hash12(vec2 p, float min, float max) {
+    return fma(hash12(p), (max - min), min) ;
+}
+float hash13(vec3 p3)
+{
+	p3  = fract(p3 * .1031);
+    p3 += dot(p3, p3.zyx + 31.32);
+    return fract((p3.x + p3.y) * p3.z);
+}
+vec2 hash23(vec3 p3)
+{
+	p3 = fract(p3 * vec3(.1031, .1030, .0973));
+    p3 += dot(p3, p3.yzx+33.33);
+    return fract((p3.xx+p3.yz)*p3.zy);
+}
+vec3 hash32(vec2 p)
+{
+	vec3 p3 = fract(vec3(p.xyx) * vec3(.1031, .1030, .0973));
+    p3 += dot(p3, p3.yxz + 33.33);
+    return fract((p3.xxy + p3.yzz) * p3.zyx);
+}
+vec3 hash32(vec2 p, float min, float max) {
+    vec3 rng = hash32(p);
+    float min_max_diff = max - min;
+    return vec3(
+        fma(rng.x, min_max_diff, min), 
+        fma(rng.y, min_max_diff, min), 
+        fma(rng.z, min_max_diff, min)
+    );
 }
 vec3 RandInHemisphere(vec2 co, vec3 normal) {
     vec3 in_unit_sphere = RandVec3(co, -1, 1);
@@ -162,17 +226,22 @@ layout (std430, binding = 4) buffer DielectricBuffer {
     readonly Dielectric dielectric[];
 };
 
+int sample_i = 0;
+vec3 RngSample(vec3 point) {
+    return fma(point, vec3(100), vec3(sample_i * 6));
+}
 
 void main() {
     ivec2 pixel_coord = ivec2(gl_GlobalInvocationID.x, gl_GlobalInvocationID.y);
 
     vec3 color = vec3(0.0, 0.0, 0.0);
-    for (int i = 0; i < camera.samples_per_pixel; i++) {
+    for (int sample_i = 0; sample_i < camera.samples_per_pixel; sample_i++) {
+        
         float x = float(pixel_coord.x);
         float y = float(pixel_coord.y);
         // TODO: remove division
-        float u = (x + Rand(vec2(x + i, y))) / (camera.image_width - 1);
-        float v = (y + Rand(vec2(x, y + i))) / (camera.image_height - 1);
+        float u = (x + hash12(vec2(x + sample_i, y) * 0.2)) / float(camera.image_width - 1);
+        float v = (y + hash12(vec2(x, y + sample_i) * 0.2)) / float(camera.image_height - 1);
         Ray ray = CameraGetRay(camera, u, v);
         color += RayColor(ray);
     }
@@ -380,10 +449,34 @@ bool OctreeHit(Ray r, float t_min, float t_max, out HitRecord hit) {
     return false;
 }
 
+// source: https://backend.orbit.dtu.dk/ws/portalfiles/portal/126824972/onb_frisvad_jgt2012_v2.pdf
+mat3 constructFrisvad(vec3 normal) {
+    mat3 ret;
+    ret[1] = normalize(normal); // TODO: normalize here is strictly not required and simply waste computation
+    // Handle the singularity
+    if(normal.z < -0.9999) {
+        ret[0] = vec3(0.0, -1.0, 0.0);
+        ret[2] = vec3(-1.0, 0.0, 0.0);
+    } else {
+        float a = 1.0 / (1.0 + normal.z);
+        float b = -normal.x * normal.y * a;
+        ret[0] = vec3(1.0 - normal.x * normal.x * a, b, -normal.x);
+        ret[2] = vec3(b, 1.0 - normal.y * normal.y * a, -normal.y);
+    }
+
+    return ret;
+}
+
 bool ScatterLambertian(Ray r_in, HitRecord hit, out vec3 attenuation, out Ray scattered) {
-    vec3 scatter_dir = hit.normal + RandInHemisphere(hit.point.xy, hit.normal);
-    if (IsNearZero(scatter_dir)) scatter_dir = hit.normal;
-    scattered = CreateRay(hit.point, scatter_dir);
+    mat3 norm_perp = constructFrisvad(hit.normal);
+    vec3 norm_space_view = vec3(dot(r_in.direction, norm_perp[0]), dot(r_in.direction, norm_perp[1]), dot(r_in.direction, norm_perp[2]));
+    vec3 scatter_sample = SampleGGXVNDF(-norm_space_view, vec2(0.85, 0.85), hash23(RngSample(hit.point)));
+    vec3 scatter_dir = reflect(r_in.direction, scatter_sample);
+    scattered = CreateRay(hit.point, hit.normal + scatter_dir);
+
+    // vec3 scatter_dir = hit.normal + RandInHemisphere(hit.point.xy, hit.normal);
+    // if (IsNearZero(scatter_dir)) scatter_dir = hit.normal;
+    // scattered = CreateRay(hit.point, scatter_dir);
     attenuation = AlbedoColor(hit.index);
     return true;
 }
@@ -417,7 +510,7 @@ bool ScatterDielectric(Ray r_in, HitRecord hit, out vec3 attenuation, out Ray sc
 
     vec3 direction;
     bool cannot_refract = refraction_ratio * sin_theta > 1.0;
-    bool should_reflect =  reflectance(cos_theta, refraction_ratio) > Rand(hit.point.xy);
+    bool should_reflect = reflectance(cos_theta, refraction_ratio) > Rand(hit.point.xy);
     if (cannot_refract || should_reflect) {
         direction = reflect(r_in.direction, hit.normal);
     } else {
