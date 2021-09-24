@@ -11,7 +11,7 @@ Download [rustup](https://www.rust-lang.org/learn/get-started). Code is tested w
 
 When that is done you should be able to run ```cargo run``` from the project folders
 
-# Keydindings
+# Keybindings
 
 * wasd - move camera
 * mouse movement - turn camera
